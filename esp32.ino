@@ -1,14 +1,27 @@
 #include "WiFi.h"
 #include "WebServer.h"
 
-const int trigPin = 13;
-const int echoPin = 12;
+#ifndef max
+#define max(a,b) (((a) > (b)) ? (a) : (b))
+#endif
 
-const char* ssid     = "ESP32-Access-Point";
+const int trigPinFL = 13;
+const int echoPinFL = 12;
+
+const int trigPinFR = 32;
+const int echoPinFR = 14;
+
+const int maxDistance = 200;
+const int maxPower = 256;
+const int minPower = -256;
+const float distanceToPowerMultiplier = 2;
+
+const char* ssid     = "ESP32";
 const char* password = "987654321";
 
 long duration;
-int distance;
+int distanceFL;
+int distanceFR;
 
 struct Channel {
     int en1;
@@ -17,8 +30,8 @@ struct Channel {
     int value;
 };
 
-Channel m1 = { 18 , 19 , 21 , 0 }; // en1 , en2 , pwm , value
-Channel m2 = { 25 , 26 , 27 , 0 };
+Channel motorRight = { 25 , 26 , 27 , 0 };
+Channel motorLeft = { 18 , 19 , 21 , 0 }; // en1 , en2 , pwm , value
 
 int standby = 33;
 
@@ -43,23 +56,26 @@ void setup() {
   WiFi.disconnect();
   delay(100);
 
-  pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
-  pinMode(echoPin, INPUT); // Sets the echoPin as an Input
+  pinMode(trigPinFL, OUTPUT);
+  pinMode(echoPinFL, INPUT);
 
-  pinMode(m1.en1, OUTPUT);
-  pinMode(m1.en2, OUTPUT);
-  pinMode(m1.pwm, OUTPUT);
-  pinMode(m2.en1, OUTPUT);
-  pinMode(m2.en2, OUTPUT);
-  pinMode(m2.pwm, OUTPUT);
+  pinMode(trigPinFR, OUTPUT);
+  pinMode(echoPinFR, INPUT);
+
+  pinMode(motorRight.en1, OUTPUT);
+  pinMode(motorRight.en2, OUTPUT);
+  pinMode(motorRight.pwm, OUTPUT);
+  pinMode(motorLeft.en1, OUTPUT);
+  pinMode(motorLeft.en2, OUTPUT);
+  pinMode(motorLeft.pwm, OUTPUT);
   pinMode(standby, OUTPUT);
 
   digitalWrite(standby, HIGH);
 
   ledcSetup(pwmChannelLeft, freq, resolution);
   ledcSetup(pwmChannelRight, freq, resolution);
-  ledcAttachPin(m1.pwm, pwmChannelLeft);
-  ledcAttachPin(m2.pwm, pwmChannelRight);
+  ledcAttachPin(motorRight.pwm, pwmChannelLeft);
+  ledcAttachPin(motorLeft.pwm, pwmChannelRight);
 
   Serial.println("Setting AP (Access Point)…");
 
@@ -70,7 +86,6 @@ void setup() {
   delay(100);
   
   server.on("/", handleIndex);
-  server.on("/distance", handleDistance);
   server.on("/data", handleData);
   
   server.begin();
@@ -79,16 +94,14 @@ void setup() {
 }
 
 void loop() {
-  
   server.handleClient();
-  
-  updateDistance();
+  updateDistance();  
   updatePWM();
 }
 
 
 void handleIndex() {
-  server.send(200, "text/html", "<html>  <head>    <style>      body {        font-size: 2em;      }      div.container {        max-width: 800px;        max-height: 600px;        width: 100%;        height: 100%;        background-color: lightgray;        position: absolute;        top: 0;        bottom: 0;        left: 0;        right: 0;        margin: auto;      }      div.progress {        left: 0;        right: 0;        position: absolute;        margin: auto;        width: 50%;        height: 50px;        background-color: blueviolet;      }      div.control {        position: absolute;        margin: auto;        width: 80%;        height: 70%;        top: 0;        bottom: 0;        left: 0;        right: 0;      }      div.left {        background-color: gray;              position: absolute;        top: 0;        bottom: 0;        left: 0;        margin: auto;      }      div.right {        background-color: gray;              position: absolute;        top: 0;        bottom: 0;        right: 0;        margin: auto;      }      .throttle {        height: 80%;        width: 100px;        padding: 0 15px;        -webkit-appearance: slider-vertical;      }      .vcenter {        position: absolute;        left: 0;        right: 0;        margin: auto;      }      label {        position: absolute;        left: 0;        right: 0;        display: block;        margin-bottom: 10px;      }      div.slider {        width: 100px;      }      div.actions {        position: absolute;        top: 0;        bottom: 0;        left: 0;        right: 0;        margin: auto;        width:300px;      }      input {        font-size: 30px;      }          </style>  </head>  <body>    <div class='container'>      <div class='progress' id='progress'></div>      <div class='control'>        <div class='left slider'>            <label id='left_label' for='left'>0</label>            <input type='range' id='left' class='throttle vcenter' min='-255' max='255'/>        </div>        <div class='actions'>          <input id='locked' type='button' value='Unlock'/>        </div>        <div class='right slider'>            <label id='right_label' for='right'>0</label>            <input type='range' id='right' class='throttle vcenter' min='-255' max='255'/>        </div>      </div>    </div>    <script>      function getProgress() {        var xhttp = new XMLHttpRequest();        var left = document.getElementById('left').value;        var right = document.getElementById('right').value;        xhttp.onreadystatechange = function() {          if (this.readyState == 4 && this.status == 200) {            var response = JSON.parse(this.responseText.trim());            var distance = Math.min(response['data']['distance'], 500);            var newWidth = parseInt(distance/5);            document.getElementById('progress').style.width =            newWidth + '%';              setTimeout(getProgress, 500);          }        };        xhttp.open('GET', '/data?right=' + right + '&left=' + left, true);        xhttp.send();      }      getProgress();      var locked = true;      document.getElementById('locked').addEventListener(        'click', function () {          if(locked) {            document.getElementById('locked').value = 'Lock';            locked = false;          } else {            document.getElementById('locked').value = 'Unlock';            locked = true;          }          document.getElementById('right').value = 0;          document.getElementById('right_label').innerText = 0;          document.getElementById('left').value = 0;          document.getElementById('left_label').innerText = 0;        }      );      document.getElementById('left').addEventListener(        'input', function () {          document.getElementById('left_label').innerText = document.getElementById('left').value;          if(locked) {            document.getElementById('right').value = document.getElementById('left').value;            document.getElementById('right_label').innerText = document.getElementById('left').value;          }        }      );      document.getElementById('right').addEventListener(        'input', function () {          document.getElementById('right_label').innerText = document.getElementById('right').value;          if(locked) {            document.getElementById('left').value = document.getElementById('right').value;            document.getElementById('left_label').innerText = document.getElementById('right').value;          }        }      );    </script>  </body></html>\n");
+  server.send(200, "text/html", "<html>  <head>    <style>      body {        font-size: 2em;      }      div.container {        max-width: 800px;        max-height: 600px;        width: 100%;        height: 100%;        background-color: lightgray;        position: absolute;        top: 0;        bottom: 0;        left: 0;        right: 0;        margin: auto;      }      div.progress {        position: absolute;        margin: auto;        width: 45%;        height: 2%;        background-color: blueviolet;      }      div.control {        position: absolute;        margin: auto;        width: 80%;        height: 70%;        top: 0;        bottom: 0;        left: 0;        right: 0;      }      div.left {        background-color: gray;              position: absolute;        top: 0;        bottom: 0;        left: 0;        margin: auto;      }      div.right {        background-color: gray;              position: absolute;        top: 0;        bottom: 0;        right: 0;        margin: auto;      }      .throttle {        height: 80%;        width: 100px;        padding: 0 15px;        -webkit-appearance: slider-vertical;      }      .vcenter {        position: absolute;        left: 0;        right: 0;        margin: auto;      }      label {        position: absolute;        left: 0;        right: 0;        display: block;        margin-bottom: 10px;      }      div.slider {        width: 100px;      }      div.actions {        position: absolute;        top: 0;        bottom: 0;        left: 0;        right: 0;        margin: auto;        width:300px;      }      input {        font-size: 30px;      }          </style>  </head>  <body>    <div class='container'>      <div class='progress' id='distanceFL' style='left:0;top:0'></div>      <div class='progress' id='distanceFR' style='right:0;top:0'></div>      <div class='control'>        <div class='left slider'>            <label id='left_label' for='left'>0</label>            <input type='range' id='left' class='throttle vcenter' min='-255' max='255'/>        </div>        <div class='actions'>          <input id='locked' type='button' value='Unlock'/>        </div>        <div class='right slider'>            <label id='right_label' for='right'>0</label>            <input type='range' id='right' class='throttle vcenter' min='-255' max='255'/>        </div>      </div>      <div class='progress' id='distanceBL' style='left:0;bottom:0'></div>      <div class='progress' id='distanceBR' style='right:0;bottom:0'></div>    </div>    <script>      function updateDistance(id, data) {        var distance = Math.min(data[id], 200);        var newWidth = parseInt(distance/5);        document.getElementById(id).style.width = newWidth + '%';        document.getElementById(id).innerHTML = distance + 'cm';      }      function getProgress() {        var xhttp = new XMLHttpRequest();        var left = document.getElementById('left').value;        var right = document.getElementById('right').value;        xhttp.onreadystatechange = function() {          if (this.readyState == 4 && this.status == 200) {            var response = JSON.parse(this.responseText.trim());            updateDistance('distanceFL', response['data']);            updateDistance('distanceFR', response['data']);            updateDistance('distanceBL', response['data']);            updateDistance('distanceBR', response['data']);                        setTimeout(getProgress, 500);          }        };        xhttp.onerror = function(e){          setTimeout(getProgress, 250);        };        xhttp.open('GET', '/data?right=' + right + '&left=' + left, true);        xhttp.send();      }      getProgress();      var locked = true;      document.getElementById('locked').addEventListener(        'click', function () {          if(locked) {            document.getElementById('locked').value = 'Lock';            locked = false;          } else {            document.getElementById('locked').value = 'Unlock';            locked = true;          }          document.getElementById('right').value = 0;          document.getElementById('right_label').innerText = 0;          document.getElementById('left').value = 0;          document.getElementById('left_label').innerText = 0;        }      );      document.getElementById('left').addEventListener(        'input', function () {          document.getElementById('left_label').innerText = document.getElementById('left').value;          if(locked) {            document.getElementById('right').value = document.getElementById('left').value;            document.getElementById('right_label').innerText = document.getElementById('left').value;          }        }      );      document.getElementById('right').addEventListener(        'input', function () {          document.getElementById('right_label').innerText = document.getElementById('right').value;          if(locked) {            document.getElementById('left').value = document.getElementById('right').value;            document.getElementById('left_label').innerText = document.getElementById('right').value;          }        }      );    </script>  </body></html>\n");
 }
 
 void handleData() {
@@ -99,20 +112,10 @@ void handleData() {
     message += server.arg(i) + "\n";
 
     if(server.argName(i) == "right") {
-      m1.value = server.arg(i).toInt();
+      motorRight.value = server.arg(i).toInt();
     }
     if(server.argName(i) == "left") {
-      m2.value = server.arg(i).toInt();
-    }
-
-    if(distance < 10) {
-      if(m1.value > 0) {
-        m1.value = m2.value;
-      }
-      if(m2.value < 0) {
-        m2.value = m1.value;  
-      }
-      
+      motorLeft.value = server.arg(i).toInt();
     }
   } 
   Serial.println(message);
@@ -121,57 +124,67 @@ void handleData() {
   String response = "";
   response += "{\"data\":{\"motors\":";
   response += "{\"left\":{\"value\":";
-  response += m2.value;
+  response += motorLeft.value;
   response += "},\"right\":{\"value\":";
-  response += m1.value;
+  response += motorRight.value;
   response += "}},";
-  response += "\"distance\":";
-  response += distance;
+  response += "\"distanceFL\":";
+  response += distanceFL;
+  response += ",\"distanceFR\":";
+  response += distanceFR;
+  response += ",\"distanceBL\":";
+  response += 0;
+  response += ",\"distanceBR\":";
+  response += 0;
   response += "}}\n";
   server.send(200, "text/html", response);
 }
 
 
 void updateDistance() {
-  digitalWrite(trigPin, LOW);
+  digitalWrite(trigPinFL, LOW);
   delayMicroseconds(2);
-
-  digitalWrite(trigPin, HIGH);
+  digitalWrite(trigPinFL, HIGH);
   delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
+  digitalWrite(trigPinFL, LOW);
+  duration = pulseIn(echoPinFL, HIGH);
+  distanceFL = duration*0.034/2;
 
-  duration = pulseIn(echoPin, HIGH);
 
-  distance = duration*0.034/2;
+  digitalWrite(trigPinFR, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPinFR, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinFR, LOW);
+  duration = pulseIn(echoPinFR, HIGH);
+  distanceFR = duration*0.034/2;
 }
-
-void handleDistance() {
-  String response = "";
-  response = response + distance;
-  response = response + "\n";
-
-  server.send(200, "text/html", response);
-}
-
 
 void updatePWM(){
-    //Channel 1
-    if(m1.value > 0){
-        digitalWrite(m1.en1, LOW);
-        digitalWrite(m1.en2, HIGH);
-    }else{
-        digitalWrite(m1.en1, HIGH);
-        digitalWrite(m1.en2, LOW);  
+    if(motorRight.value > 0 && distanceFL < 100) {
+      motorRight.value = max(motorRight.value - (maxDistance - distanceFL) * distanceToPowerMultiplier, minPower);
     }
-    ledcWrite(pwmChannelLeft, abs(m1.value));
+    if(motorLeft.value > 0 && distanceFR < 100) {
+      motorLeft.value = max(motorLeft.value - (maxDistance - distanceFR) * distanceToPowerMultiplier, minPower);
+    }
+    
+    //Channel 1
+    if(motorRight.value > 0){
+        digitalWrite(motorRight.en1, LOW);
+        digitalWrite(motorRight.en2, HIGH);
+    }else{
+        digitalWrite(motorRight.en1, HIGH);
+        digitalWrite(motorRight.en2, LOW);  
+    }
+    ledcWrite(pwmChannelLeft, abs(motorRight.value));
 
     //Channel 2
-    if(m2.value < 0){
-        digitalWrite(m2.en1, LOW);
-        digitalWrite(m2.en2, HIGH);
+    if(motorLeft.value > 0){
+        digitalWrite(motorLeft.en1, LOW);
+        digitalWrite(motorLeft.en2, HIGH);
     }else{
-        digitalWrite(m2.en1, HIGH);
-        digitalWrite(m2.en2, LOW); 
+        digitalWrite(motorLeft.en1, HIGH);
+        digitalWrite(motorLeft.en2, LOW); 
     }
-    ledcWrite(pwmChannelRight, abs(m2.value));
+    ledcWrite(pwmChannelRight, abs(motorLeft.value));
 }

@@ -20,12 +20,10 @@
         margin: auto;
       }
       div.progress {
-        left: 0;
-        right: 0;
         position: absolute;
         margin: auto;
-        width: 50%;
-        height: 50px;
+        width: 45%;
+        height: 2%;
         background-color: blueviolet;
       }
       div.control {
@@ -102,7 +100,8 @@
   </head>
   <body>
     <div class='container'>
-      <div class='progress' id='progress'></div>
+      <div class='progress' id='distanceFL' style='left:0;top:0'></div>
+      <div class='progress' id='distanceFR' style='right:0;top:0'></div>
       <div class='control'>
         <div class='left slider'>
             <label id='left_label' for='left'>0</label>
@@ -116,8 +115,17 @@
             <input type='range' id='right' class='throttle vcenter' min='-255' max='255'/>
         </div>
       </div>
+      <div class='progress' id='distanceBL' style='left:0;bottom:0'></div>
+      <div class='progress' id='distanceBR' style='right:0;bottom:0'></div>
     </div>
     <script>
+      function updateDistance(id, data) {
+        var distance = Math.min(data[id], 200);
+        var newWidth = parseInt(distance/5);
+        document.getElementById(id).style.width = newWidth + '%';
+        document.getElementById(id).innerHTML = distance + 'cm';
+      }
+
       function getProgress() {
         var xhttp = new XMLHttpRequest();
         var left = document.getElementById('left').value;
@@ -125,13 +133,18 @@
         xhttp.onreadystatechange = function() {
           if (this.readyState == 4 && this.status == 200) {
             var response = JSON.parse(this.responseText.trim());
-            var distance = Math.min(response['data']['distance'], 500);
-            var newWidth = parseInt(distance/5);
-            document.getElementById('progress').style.width =
-            newWidth + '%';
-              setTimeout(getProgress, 500);
+            updateDistance('distanceFL', response['data']);
+            updateDistance('distanceFR', response['data']);
+            updateDistance('distanceBL', response['data']);
+            updateDistance('distanceBR', response['data']);
+            
+            setTimeout(getProgress, 250);
           }
         };
+        xhttp.onerror = function(e){
+          setTimeout(getProgress, 250);
+        };
+
         xhttp.open('GET', '/data?right=' + right + '&left=' + left, true);
         xhttp.send();
       }
