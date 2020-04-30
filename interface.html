@@ -133,16 +133,15 @@
         xhttp.onreadystatechange = function() {
           if (this.readyState == 4 && this.status == 200) {
             var response = JSON.parse(this.responseText.trim());
+            console.log(this.responseText);
             updateDistance('distanceFL', response['data']);
             updateDistance('distanceFR', response['data']);
-            updateDistance('distanceBL', response['data']);
-            updateDistance('distanceBR', response['data']);
             
             setTimeout(getProgress, 250);
           }
         };
         xhttp.onerror = function(e){
-          setTimeout(getProgress, 250);
+          setTimeout(getProgress, 50);
         };
 
         xhttp.open('GET', '/data?right=' + right + '&left=' + left, true);
