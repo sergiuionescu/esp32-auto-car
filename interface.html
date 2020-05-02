@@ -9,9 +9,7 @@
         max-height: 600px;
         width: 100%;
         height: 100%;
-        background-color: lightgray;
 
-        position: absolute;
         top: 0;
         bottom: 0;
         left: 0;
@@ -37,22 +35,14 @@
         right: 0;
       }
       div.left {
-        background-color: gray;
-      
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        margin: auto;
+        padding-top: 10%;
+        width:50%;
+        float: left;
       }
       div.right {
-        background-color: gray;
-      
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        right: 0;
-        margin: auto;
+        padding-top: 10%;
+        width:50%;
+        float: left;
       }
 
       .throttle {
@@ -80,17 +70,6 @@
       div.slider {
         width: 100px;
       }
-
-      div.actions {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        margin: auto;
-        width:300px;
-      }
-
       input {
         font-size: 30px;
       }
@@ -102,23 +81,32 @@
     <div class='container'>
       <div class='progress' id='distanceFL' style='left:0;top:0'></div>
       <div class='progress' id='distanceFR' style='right:0;top:0'></div>
-      <div class='control'>
-        <div class='left slider'>
-            <label id='left_label' for='left'>0</label>
-            <input type='range' id='left' class='throttle vcenter' min='-255' max='255'/>
-        </div>
-        <div class='actions'>
-          <input id='locked' type='button' value='Unlock'/>
-        </div>
-        <div class='right slider'>
-            <label id='right_label' for='right'>0</label>
-            <input type='range' id='right' class='throttle vcenter' min='-255' max='255'/>
-        </div>
+      <div class='toolbar'>
+        <input type='button' id='record' name='record' value='O' /> 
+        <input type='button' id='stop' name='stop' value='[]' disabled='disabled' /> 
+        <input type='button' id='play' name='play' value='>' disabled='disabled'/> 
+        <div id='counter'></div>
       </div>
-      <div class='progress' id='distanceBL' style='left:0;bottom:0'></div>
-      <div class='progress' id='distanceBR' style='right:0;bottom:0'></div>
+      <div>   
+        <div class='left'>
+            <div id='left_joystick' style='width:200px;height:200px;margin:50px'></div>
+        </div>
+        <div class='right'>
+            <div id='right_joystick' style='width:200px;height:200px;margin:50px'></div>
+        </div>
+        
+      </div>
     </div>
+    <script src='joy.min.js'></script>
     <script>
+      var leftJoystick = new JoyStick('left_joystick');
+      var rightJoystick = new JoyStick('right_joystick');
+      var maxThrottle = 200;
+      var recordingOn = false;
+      var recording = [];
+      var playCursor = 0;
+      var playbackOn = false;
+
       function updateDistance(id, data) {
         var distance = Math.min(data[id], 200);
         var newWidth = parseInt(distance/5);
@@ -127,63 +115,85 @@
       }
 
       function getProgress() {
+        var throttle = leftJoystick.GetY();
+        var turn = rightJoystick.GetX();
+
+        var left = throttle * maxThrottle / 100;
+        left = left + (maxThrottle - left) * turn / 100;
+        var right = throttle * maxThrottle / 100;
+        right = right - (maxThrottle - right) * turn / 100;
+
+        if(recordingOn) {
+          recording.push({'left':left, 'right':right});
+          document.getElementById('counter').innerHTML = recording.length;
+        }
+        if(!playbackOn) {
+          performAction(left, right, getProgress);
+        }
+      }
+
+      function performAction(left, right, callback) {
         var xhttp = new XMLHttpRequest();
-        var left = document.getElementById('left').value;
-        var right = document.getElementById('right').value;
         xhttp.onreadystatechange = function() {
           if (this.readyState == 4 && this.status == 200) {
             var response = JSON.parse(this.responseText.trim());
             console.log(this.responseText);
             updateDistance('distanceFL', response['data']);
             updateDistance('distanceFR', response['data']);
+            setTimeout(callback, 1000);
             
-            setTimeout(getProgress, 250);
           }
         };
         xhttp.onerror = function(e){
-          setTimeout(getProgress, 50);
+          setTimeout(callback, 2000);
         };
 
         xhttp.open('GET', '/data?right=' + right + '&left=' + left, true);
         xhttp.send();
       }
+      
       getProgress();
 
-      var locked = true;
+      function playback() {
+        if(playCursor >= recording.length) {
+          playbackOn = false;
+          document.getElementById('record').disabled = '';
+          document.getElementById('stop').disabled = '';
+          getProgress();
+          return;
+        }
+        document.getElementById('counter').innerHTML = playCursor;
+        left = recording[playCursor]['left'];
+        right = recording[playCursor]['right'];
+        playCursor++;
+        performAction(left, right, playback);
+      }
 
-      document.getElementById('locked').addEventListener(
+      document.getElementById('record').addEventListener(
         'click', function () {
-          if(locked) {
-            document.getElementById('locked').value = 'Lock';
-            locked = false;
-          } else {
-            document.getElementById('locked').value = 'Unlock';
-            locked = true;
-          }
-          document.getElementById('right').value = 0;
-          document.getElementById('right_label').innerText = 0;
-          document.getElementById('left').value = 0;
-          document.getElementById('left_label').innerText = 0;
+          document.getElementById('record').disabled = 'disabled';
+          document.getElementById('stop').disabled = '';
+          recordingOn = true;
+          recording = [];
         }
       );
 
-      document.getElementById('left').addEventListener(
-        'input', function () {
-          document.getElementById('left_label').innerText = document.getElementById('left').value;
-          if(locked) {
-            document.getElementById('right').value = document.getElementById('left').value;
-            document.getElementById('right_label').innerText = document.getElementById('left').value;
-          }
+      document.getElementById('stop').addEventListener(
+        'click', function () {
+          document.getElementById('stop').disabled = 'disabled';
+          document.getElementById('record').disabled = '';
+          document.getElementById('play').disabled = '';
+          recordingOn = false;
         }
       );
 
-      document.getElementById('right').addEventListener(
-        'input', function () {
-          document.getElementById('right_label').innerText = document.getElementById('right').value;
-          if(locked) {
-            document.getElementById('left').value = document.getElementById('right').value;
-            document.getElementById('left_label').innerText = document.getElementById('right').value;
-          }
+      document.getElementById('play').addEventListener(
+        'click', function () {
+          document.getElementById('record').disabled = 'disabled';
+          document.getElementById('stop').disabled = '';
+          playbackOn = true;
+          playCursor = 0;
+          playback();
         }
       );
     </script>
