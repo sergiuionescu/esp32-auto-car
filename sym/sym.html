@@ -1,0 +1,208 @@
+<html>
+
+<head>
+</head>
+
+<body>
+  <div class="container">
+    </script>
+</body>
+<script src="js/matter.min.js"> </script>
+<script>
+  function initEnvironment() {
+    var Engine = Matter.Engine,
+      Render = Matter.Render,
+      World = Matter.World,
+      Bodies = Matter.Bodies,
+      Body = Matter.Body,
+      Events = Matter.Events,
+      Query = Matter.Query,
+      Composite = Matter.Composite,
+      sensorDistanceFL = 200,
+      sensorDistanceFR = 200,
+      timer = 0,
+      maxTimer = 10000;
+
+    // create an engine
+    var engine = Engine.create();
+    engine.world.gravity.y = 0;
+    // engine.world.gravity.y=1.62;
+    // engine.world.gravity.y=0.62;
+    // engine.world.gravity.x=9.81;
+
+    // create a renderer
+    var render = Render.create({
+      element: document.body,
+      engine: engine,
+      options: {
+        showAngleIndicator: true,
+        showDebug: true,
+        showVelocity: true,
+        showCollisions: true,
+      }
+    });
+
+    //create the car
+    var
+      carX = 60,
+      carY = 300,
+      carLength = 50,
+      carWidth = carLength / 5 * 3,
+      carBody = Bodies.rectangle(carX, carY, carLength, carWidth),
+      sensorRadius = carLength / 15,
+      carWheelFL = Bodies.rectangle(carX - carLength / 2 + carLength / 3.5, carY - carWidth / 2, carLength / 3.5, carWidth / 3.5),
+      carWheelBL = Bodies.rectangle(carX + carLength / 2 - carLength / 3.5, carY - carWidth / 2, carLength / 3.5, carWidth / 3.5),
+      carWheelFR = Bodies.rectangle(carX - carLength / 2 + carLength / 3.5, carY + carWidth / 2, carLength / 3.5, carWidth / 3.5),
+      carWheelBR = Bodies.rectangle(carX + carLength / 2 - carLength / 3.5, carY + carWidth / 2, carLength / 3.5, carWidth / 3.5),
+      sensorFL = Bodies.circle(carX + carLength / 2 - carLength / 15, carY - carWidth / 2 + carLength * 2 / 15, sensorRadius),
+      sensorFR = Bodies.circle(carX + carLength / 2 - carLength / 15, carY + carWidth / 2 - carLength * 2 / 15, sensorRadius),
+      car = Body.create({
+        parts: [
+          carBody,
+          carWheelFL,
+          carWheelBL,
+          carWheelFR,
+          carWheelBR,
+          sensorFL,
+          sensorFR
+        ]
+      });
+    car.frictionAir = 0.1;
+
+    // create two boxes and a ground
+    var boxes = [];
+    for (i = 0; i < 10; i++) {
+      var box = Bodies.rectangle(800 * Math.random(), 600 * Math.random(), 100 * Math.random(), 100 * Math.random(), { isStatic: true });
+      boxes.push(box);
+    }
+
+    var wallB = Bodies.rectangle(400, 610, 810, 60, { isStatic: true });
+    var wallT = Bodies.rectangle(400, 0, 810, 30, { isStatic: true });
+    var wallL = Bodies.rectangle(0, 305, 60, 810, { isStatic: true });
+    var wallR = Bodies.rectangle(800, 305, 60, 810, { isStatic: true });
+    boxes.push(wallB);
+    boxes.push(wallT);
+    boxes.push(wallL);
+    boxes.push(wallR);
+
+    var obstacles = boxes.slice();
+    boxes.push(car);
+
+
+    // add all of the bodies to the world
+    World.add(engine.world, boxes);
+
+    // sensors
+    Events.on(render, 'afterRender', function () {
+      var sensorRange = 200,
+        context = render.context,
+        bodies = obstacles,
+        startPointFL = sensorFL.position,
+        startPointFR = sensorFR.position,
+        sensorAngleFL = car.angle - 0.785,
+        sensorAngleFR = car.angle + 0.785,
+        endPointFL = { x: sensorFL.position.x + sensorRange * Math.cos(sensorAngleFL), y: sensorFL.position.y + sensorRange * Math.sin(sensorAngleFL) },
+        endPointFR = { x: sensorFR.position.x + sensorRange * Math.cos(sensorAngleFR), y: sensorFR.position.y + sensorRange * Math.sin(sensorAngleFR) };
+
+
+      sensorDistanceFL = sensorDistanceFR = sensorRange;
+      var collisionsFL = Query.ray(bodies, startPointFL, endPointFL);
+      var collisionsFR = Query.ray(bodies, startPointFR, endPointFR);
+
+      Render.startViewTransform(render);
+
+      context.beginPath();
+      context.moveTo(startPointFL.x, startPointFL.y);
+
+      if (collisionsFL.length > 0) {
+        context.strokeStyle = '#fff';
+      } else {
+        context.strokeStyle = '#555';
+      }
+
+      for (var i = 0; i < collisionsFL.length; i++) {
+        var collision = collisionsFL[i];
+        context.lineTo(collision.supports[0].x, collision.supports[0].y);
+        context.rect(collision.bodyA.position.x - 4.5, collision.bodyA.position.y - 4.5, 8, 8);
+        sensorDistanceFL = Math.sqrt(Math.pow(sensorFL.position.x - collision.bodyA.position.x, 2) + Math.pow(sensorFL.position.y - collision.bodyA.position.y, 2));
+        break;
+      }
+
+      context.lineWidth = 0.5;
+      context.stroke();
+
+
+      context.fillStyle = 'rgba(255,165,0,0.7)';
+      context.fill();
+
+      context.beginPath();
+      context.moveTo(startPointFR.x, startPointFR.y);
+      if (collisionsFR.length > 0) {
+        context.strokeStyle = '#fff';
+      } else {
+        context.strokeStyle = '#555';
+      }
+
+      for (var i = 0; i < collisionsFR.length; i++) {
+        var collision = collisionsFR[i];
+        context.lineTo(collision.supports[0].x, collision.supports[0].y);
+        context.rect(collision.bodyA.position.x - 4.5, collision.bodyA.position.y - 4.5, 8, 8);
+        sensorDistanceFR = Math.sqrt(Math.pow(sensorFR.position.x - collision.bodyA.position.x, 2) + Math.pow(sensorFR.position.y - collision.bodyA.position.y, 2));
+        break;
+      }
+
+      context.lineWidth = 0.5;
+      context.stroke();
+
+
+      context.fillStyle = 'rgba(255,165,0,0.7)';
+      context.fill();
+
+      Render.endViewTransform(render);
+    });
+
+    // run the engine
+    Engine.run(engine);
+
+    // run the renderer
+    Render.run(render);
+
+    function reset() {
+      Matter.Render.stop(render); // this only stop renderer but not destroy canvas
+      render.canvas.remove();
+      timer = 0;
+      initEnvironment();
+    }
+
+    function addInput() {
+      var speed = 100;
+      var force = speed / 40000;
+      if (!isNaN(sensorDistanceFR)) {
+        leftForce = force * (sensorDistanceFR) / 200;
+      } else {
+        leftForce = force;
+      }
+      if (!isNaN(sensorDistanceFL)) {
+        rightForce = force * (sensorDistanceFL) / 200;
+      } else {
+        rightForce = force;
+      }
+      Body.applyForce(car, { x: car.position.x, y: car.position.y - carWidth / 2 }, { x: leftForce * Math.cos(car.angle), y: leftForce * Math.sin(car.angle) });
+      Body.applyForce(car, { x: car.position.x, y: car.position.y + carWidth / 2 }, { x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle) });
+
+      console.log([sensorDistanceFL, sensorDistanceFR, car.angle, car.acceleration])
+      
+      timer += 50;
+      if (timer > maxTimer) {
+        reset();
+        return;
+      }
+      setTimeout(addInput, 50);
+    }
+
+    addInput();
+  }
+  initEnvironment();
+</script>
+
+</html>
