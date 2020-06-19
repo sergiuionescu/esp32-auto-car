@@ -8,7 +8,14 @@
     </script>
 </body>
 <script src="js/matter.min.js"> </script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js"></script>
 <script>
+  // create the model
+  const model = tf.sequential();
+  model.add(tf.layers.dense({units: 3, inputShape: [6]}));
+  model.add(tf.layers.dense({units: 3, inputShape: [3], activation: 'sigmoid'}));
+  model.compile({loss: 'meanSquaredError', optimizer: 'sgd', metrics: ['accuracy']});
+
   function initEnvironment() {
     var Engine = Matter.Engine,
       Render = Matter.Render,
@@ -18,17 +25,17 @@
       Events = Matter.Events,
       Query = Matter.Query,
       Composite = Matter.Composite,
-      sensorDistanceFL = 200,
-      sensorDistanceFR = 200,
+      sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 200,
+      maxSpeed = 200,
       timer = 0,
-      maxTimer = 10000;
+      maxTimer = 10000,
+      multiplier=1,
+      featureData = [], 
+      labelData = [];
 
     // create an engine
     var engine = Engine.create();
     engine.world.gravity.y = 0;
-    // engine.world.gravity.y=1.62;
-    // engine.world.gravity.y=0.62;
-    // engine.world.gravity.x=9.81;
 
     // create a renderer
     var render = Render.create({
@@ -168,36 +175,108 @@
     Render.run(render);
 
     function reset() {
+      featureData = [];
+      labelData = [];
       Matter.Render.stop(render); // this only stop renderer but not destroy canvas
       render.canvas.remove();
       timer = 0;
       initEnvironment();
     }
 
+    function train(featureData, labelData) {
+      function onBatchEnd(batch, logs) {
+        console.log(logs);
+      }
+
+      const xs = tf.tensor2d(featureData, [featureData.length, 6]);
+      const ys = tf.tensor2d(labelData, [labelData.length, 3]);
+
+      // Train the model using the data.
+      model.fit(xs, ys, 
+        {
+          epochs: 500,
+          callbacks: {onEpochEnd: onBatchEnd}//tf.callbacks.earlyStopping({monitor: 'loss'})
+        }).then(() => {
+        // Use the model to do inference on a data point the model hasn't seen before:
+        // Open the browser devtools to see the output
+        model.predict(tf.tensor2d(featureData.slice(-1), [1, 6])).print();
+        model.predict(tf.tensor2d([200, 200, 0, 100, 100, 0.5], [1, 6])).print();
+        model.predict(tf.tensor2d([200, 200, 0, -100, 100, 0.5], [1, 6])).print();
+        model.predict(tf.tensor2d([200, 200, 0, 100, -100, 0.5], [1, 6])).print();
+        model.predict(tf.tensor2d([200, 200, 0, -100, -100, 0.5], [1, 6])).print();
+
+        reset();
+      });
+    }
+
+    function getModelControl(features) {
+      speedOptions = [100, -100];
+      for(i=0; i<speedOptions.length; i++) {
+        for(j=0; j<speedOptions.length; j++) {
+          features[3] = speedOptions[i];
+          features[4] = speedOptions[j];
+
+          predictions = model.predict(tf.tensor2d(features, [1, features.length]));
+          if(predictions.dataSync()[2]>0.5) {
+            console.log(features);
+            return features;
+          }
+        }
+      }
+      if(features[5]<0.5) {
+        features[3] = 200 - 400 * Math.random();
+        features[4] = 200 - 400 * Math.random();
+      } else {
+        features[3] = 100;
+        features[4] = 100;
+      }
+      
+
+      return features;
+    }
+
     function addInput() {
       var speed = 100;
-      var force = speed / 40000;
+
+      features = [
+        sensorDistanceFL, 
+        sensorDistanceFR, 
+        car.angle, 
+        0, 
+        0, 
+        car.speed
+      ];
+      featureData.push(features);
+      
+      labelData.push([
+        sensorDistanceFL > 100 ? 1 : 0,
+        sensorDistanceFR > 100 ? 1 : 0,
+        car.speed > 0.5 ? 1 : 0
+      ]);
+
+      features = getModelControl(features);
+      leftSpeed = features[3];
+      rightSpeed = features[4];
+
       if (!isNaN(sensorDistanceFR)) {
-        leftForce = force * (sensorDistanceFR) / 200;
+        leftForce = leftSpeed / 40000 * multiplier;
       } else {
         leftForce = force;
       }
       if (!isNaN(sensorDistanceFL)) {
-        rightForce = force * (sensorDistanceFL) / 200;
+        rightForce = rightSpeed / 40000 * multiplier;
       } else {
         rightForce = force;
       }
       Body.applyForce(car, { x: car.position.x, y: car.position.y - carWidth / 2 }, { x: leftForce * Math.cos(car.angle), y: leftForce * Math.sin(car.angle) });
       Body.applyForce(car, { x: car.position.x, y: car.position.y + carWidth / 2 }, { x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle) });
 
-      console.log([sensorDistanceFL, sensorDistanceFR, car.angle, car.acceleration])
-      
       timer += 50;
       if (timer > maxTimer) {
-        reset();
+        train(featureData, labelData);
         return;
       }
-      setTimeout(addInput, 50);
+      setTimeout(addInput, 50/multiplier);
     }
 
     addInput();
