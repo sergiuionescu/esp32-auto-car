@@ -1,20 +1,55 @@
 <html>
 
 <head>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+    integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
 </head>
 
 <body>
   <div class="container">
+    <div class="row">
+      <div class="col">
+        <div id="environment"></div>
+      </div>
+      <div class="col">
+        <div>
+          <span class="label label-default">Queued</span>
+          <span class="label label-primary" id="train_queued">0</span>
+        </div>
+        <div>
+          <span class="label label-default">Trained</span>
+          <span class="label label-primary" id="train_batch">0</span>
+        </div>
+        <div id="canvas-container" width="100px">
+        </div>
+      </div>
+    </div>
     </script>
 </body>
 <script src="js/matter.min.js"> </script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js"></script>
+
+<script src="https://code.jquery.com/jquery-3.4.0.min.js"
+  integrity="sha256-BJeo0qm959uMBGb65z40ejJYGSgR7REI4+CW1fNKwOg=" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+  integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+  integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+<script
+  src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script>
+  var trainingQueue = [],
+    inTraining = false,
+    experience = 0,
+    evolutionChart;
   // create the model
   const model = tf.sequential();
-  model.add(tf.layers.dense({units: 3, inputShape: [6]}));
-  model.add(tf.layers.dense({units: 3, inputShape: [3], activation: 'sigmoid'}));
-  model.compile({loss: 'meanSquaredError', optimizer: 'sgd', metrics: ['accuracy']});
+  model.add(tf.layers.dense({ units: 6, inputShape: [10] }));
+  model.add(tf.layers.dense({ units: 3, inputShape: [3], activation: 'sigmoid' }));
+  model.compile({ loss: 'meanSquaredError', optimizer: 'sgd', metrics: ['accuracy'] });
+  latest_loss = 1;
+  latest_accuracy = 0;
 
   function initEnvironment() {
     var Engine = Matter.Engine,
@@ -29,8 +64,9 @@
       maxSpeed = 200,
       timer = 0,
       maxTimer = 10000,
-      multiplier=1,
-      featureData = [], 
+      multiplier = 1,
+      previousFeatures = [0, 0, 0, 0];
+    featureData = [],
       labelData = [];
 
     // create an engine
@@ -39,7 +75,7 @@
 
     // create a renderer
     var render = Render.create({
-      element: document.body,
+      element: document.getElementById('environment'),
       engine: engine,
       options: {
         showAngleIndicator: true,
@@ -78,7 +114,7 @@
 
     // create two boxes and a ground
     var boxes = [];
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < (1 - latest_loss) * 10; i++) {
       var box = Bodies.rectangle(800 * Math.random(), 600 * Math.random(), 100 * Math.random(), 100 * Math.random(), { isStatic: true });
       boxes.push(box);
     }
@@ -175,6 +211,7 @@
     Render.run(render);
 
     function reset() {
+      enqueueForTraining(featureData, labelData);
       featureData = [];
       labelData = [];
       Matter.Render.stop(render); // this only stop renderer but not destroy canvas
@@ -183,54 +220,72 @@
       initEnvironment();
     }
 
-    function train(featureData, labelData) {
+    function enqueueForTraining(featureData, labelData) {
+      trainingQueue.push([featureData, labelData]);
+      document.getElementById('train_queued').innerHTML = trainingQueue.length;
+      if (!inTraining) {
+        train();
+      }
+    }
+
+    function train() {
+      if (trainingQueue.length == 0 || inTraining) {
+        console.log('Nothing to train on or already in training.')
+        return;
+      }
+      trainingSet = trainingQueue.shift();
+      var featureData = trainingSet[0];
+      var labelData = trainingSet[1];
+      document.getElementById('train_queued').innerHTML = trainingQueue.length;
+      experience += 1;
+
+      console.log('Start training ' + experience);
+      document.getElementById('train_batch').innerHTML = experience;
+      inTraining = true;
       function onBatchEnd(batch, logs) {
-        console.log(logs);
+        latest_loss = logs.loss;
+        latest_accuracy = logs.acc;
       }
 
-      const xs = tf.tensor2d(featureData, [featureData.length, 6]);
+      featureLength = featureData[featureData.length - 1].length;
+      const xs = tf.tensor2d(featureData, [featureData.length, featureLength]);
       const ys = tf.tensor2d(labelData, [labelData.length, 3]);
 
       // Train the model using the data.
-      model.fit(xs, ys, 
+      model.fit(xs, ys,
         {
           epochs: 500,
-          callbacks: {onEpochEnd: onBatchEnd}//tf.callbacks.earlyStopping({monitor: 'loss'})
+          callbacks: { onEpochEnd: onBatchEnd }//tf.callbacks.earlyStopping({monitor: 'loss'})
         }).then(() => {
-        // Use the model to do inference on a data point the model hasn't seen before:
-        // Open the browser devtools to see the output
-        model.predict(tf.tensor2d(featureData.slice(-1), [1, 6])).print();
-        model.predict(tf.tensor2d([200, 200, 0, 100, 100, 0.5], [1, 6])).print();
-        model.predict(tf.tensor2d([200, 200, 0, -100, 100, 0.5], [1, 6])).print();
-        model.predict(tf.tensor2d([200, 200, 0, 100, -100, 0.5], [1, 6])).print();
-        model.predict(tf.tensor2d([200, 200, 0, -100, -100, 0.5], [1, 6])).print();
 
-        reset();
-      });
+          model.predict(tf.tensor2d(featureData.slice(-1), [1, featureLength])).print();
+
+          inTraining = false;
+          pushToEvolutionChart(experience, latest_loss, latest_accuracy);
+          setTimeout(train, 10000);
+        });
     }
 
     function getModelControl(features) {
       speedOptions = [100, -100];
-      for(i=0; i<speedOptions.length; i++) {
-        for(j=0; j<speedOptions.length; j++) {
-          features[3] = speedOptions[i];
-          features[4] = speedOptions[j];
+      if (Math.random() > latest_loss) {
+        for (i = 0; i < speedOptions.length; i++) {
+          for (j = 0; j < speedOptions.length; j++) {
+            var testFeatures = features.slice();
+            testFeatures.push(speedOptions[i]);
+            testFeatures.push(speedOptions[j]);
 
-          predictions = model.predict(tf.tensor2d(features, [1, features.length]));
-          if(predictions.dataSync()[2]>0.5) {
-            console.log(features);
-            return features;
+            predictions = model.predict(tf.tensor2d(testFeatures, [1, testFeatures.length]));
+            if (predictions.dataSync()[0] > 0.5 && predictions.dataSync()[1] > 0.5 && predictions.dataSync()[2] > 0.5) {
+              console.log(testFeatures);
+              return testFeatures;
+            }
           }
         }
       }
-      if(features[5]<0.5) {
-        features[3] = 200 - 400 * Math.random();
-        features[4] = 200 - 400 * Math.random();
-      } else {
-        features[3] = 100;
-        features[4] = 100;
-      }
-      
+
+      features.push(200 - 400 * Math.random());
+      features.push(200 - 400 * Math.random());
 
       return features;
     }
@@ -238,25 +293,26 @@
     function addInput() {
       var speed = 100;
 
-      features = [
-        sensorDistanceFL, 
-        sensorDistanceFR, 
-        car.angle, 
-        0, 
-        0, 
+      var currentFeatures = [
+        sensorDistanceFL,
+        sensorDistanceFR,
+        car.angle,
         car.speed
       ];
+      features = previousFeatures.concat(currentFeatures);
+      previousFeatures = currentFeatures;
+
       featureData.push(features);
-      
+
       labelData.push([
         sensorDistanceFL > 100 ? 1 : 0,
         sensorDistanceFR > 100 ? 1 : 0,
-        car.speed > 0.5 ? 1 : 0
+        car.speed > 0.1 ? 1 : 0
       ]);
 
       features = getModelControl(features);
-      leftSpeed = features[3];
-      rightSpeed = features[4];
+      leftSpeed = features[features.length - 2];
+      rightSpeed = features[features.length - 1];
 
       if (!isNaN(sensorDistanceFR)) {
         leftForce = leftSpeed / 40000 * multiplier;
@@ -273,15 +329,81 @@
 
       timer += 50;
       if (timer > maxTimer) {
-        train(featureData, labelData);
+        reset();
         return;
       }
-      setTimeout(addInput, 50/multiplier);
+      setTimeout(addInput, 50 / multiplier);
     }
 
     addInput();
   }
   initEnvironment();
+</script>
+<script>
+  function createChart() {
+    var canvasContainer = document.getElementById('canvas-container');
+    var canvas = document.createElement("CANVAS");
+    canvas.width = 100;
+    canvas.height = 100;
+    canvasContainer.appendChild(canvas);
+    evolutionChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'loss',
+            yAxisID: 'y-axis-1',
+            fill: false,
+            borderColor: "#E74C3C",
+            data: []
+          },
+          {
+            label: 'acc',
+            yAxisID: 'y-axis-2',
+            fill: false,
+            borderColor: "#16A085",
+            data: []
+          }
+        ]
+      },
+      options: {
+        title: {
+          display: true,
+          text: 'Training evolution'
+        },
+        scales: {
+          yAxes: [
+            {
+              type: "linear", // only linear but allow scale type registration. This allows extensions to exist solely for log scale for instance
+              display: true,
+              position: "left",
+              id: "y-axis-1",
+            },
+            {
+              type: "linear", // only linear but allow scale type registration. This allows extensions to exist solely for log scale for instance
+              display: true,
+              position: "right",
+              id: "y-axis-2",
+
+              // grid line settings
+              gridLines: {
+                drawOnChartArea: false, // only want the grid lines for one axis to show up
+              },
+            }
+          ],
+        }
+      }
+    });
+  }
+  function pushToEvolutionChart(epoch, loss, accuracy) {
+    evolutionChart.data.labels.push(epoch);
+    evolutionChart.data.datasets[0].data.push(loss);
+    evolutionChart.data.datasets[1].data.push(accuracy);
+    evolutionChart.update();
+  }
+  createChart();
+
 </script>
 
 </html>
