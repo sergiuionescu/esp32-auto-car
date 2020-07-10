@@ -22,9 +22,16 @@
         </div>
         <div id="canvas-container" width="100px">
         </div>
+
       </div>
     </div>
-    </script>
+    <div class="row">
+        <div>
+            <pre>
+                <code id="feature-log"></code>
+              </pre>
+          </div>
+    </div>
 </body>
 <script src="js/matter.min.js"> </script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js"></script>
@@ -45,8 +52,8 @@
     evolutionChart;
   // create the model
   const model = tf.sequential();
-  model.add(tf.layers.dense({ units: 6, inputShape: [10] }));
-  model.add(tf.layers.dense({ units: 3, inputShape: [3], activation: 'sigmoid' }));
+  model.add(tf.layers.dense({ units: 10, inputShape: [10] }));
+  model.add(tf.layers.dense({ units: 3, inputShape: [10], activation: 'sigmoid' }));
   model.compile({ loss: 'meanSquaredError', optimizer: 'sgd', metrics: ['accuracy'] });
   latest_loss = 1;
   latest_accuracy = 0;
@@ -240,7 +247,6 @@
       experience += 1;
 
       console.log('Start training ' + experience);
-      document.getElementById('train_batch').innerHTML = experience;
       inTraining = true;
       function onBatchEnd(batch, logs) {
         latest_loss = logs.loss;
@@ -248,22 +254,30 @@
       }
 
       featureLength = featureData[featureData.length - 1].length;
-      const xs = tf.tensor2d(featureData, [featureData.length, featureLength]);
-      const ys = tf.tensor2d(labelData, [labelData.length, 3]);
+      try {
+        const xs = tf.tensor2d(featureData, [featureData.length, featureLength]);
+        const ys = tf.tensor2d(labelData, [labelData.length, 3]);
 
-      // Train the model using the data.
-      model.fit(xs, ys,
-        {
-          epochs: 500,
-          callbacks: { onEpochEnd: onBatchEnd }//tf.callbacks.earlyStopping({monitor: 'loss'})
-        }).then(() => {
 
-          model.predict(tf.tensor2d(featureData.slice(-1), [1, featureLength])).print();
+        // Train the model using the data.
+        model.fit(xs, ys,
+          {
+            epochs: 500,
+            callbacks: { onEpochEnd: onBatchEnd }//tf.callbacks.earlyStopping({monitor: 'loss'})
+          }).then(() => {
 
-          inTraining = false;
-          pushToEvolutionChart(experience, latest_loss, latest_accuracy);
-          setTimeout(train, 10000);
-        });
+            model.predict(tf.tensor2d(featureData.slice(-1), [1, featureLength])).print();
+
+            inTraining = false;
+            document.getElementById('train_batch').innerHTML = experience;
+            pushToEvolutionChart(experience, latest_loss, latest_accuracy);
+            console.log('Finished training ' + experience);
+            setTimeout(train, 10000);
+          });
+      } catch (err) {
+        console.log(err.message);
+        inTraining = false;
+      }
     }
 
     function getModelControl(features) {
@@ -277,15 +291,17 @@
 
             predictions = model.predict(tf.tensor2d(testFeatures, [1, testFeatures.length]));
             if (predictions.dataSync()[0] > 0.5 && predictions.dataSync()[1] > 0.5 && predictions.dataSync()[2] > 0.5) {
-              console.log(testFeatures);
+              if(Math.random() > latest_loss) {
+                document.getElementById('feature-log').innerHTML = JSON.stringify(testFeatures);
+              }
               return testFeatures;
             }
           }
         }
       }
 
-      features.push(200 - 400 * Math.random());
-      features.push(200 - 400 * Math.random());
+      features.push(200 - 400 * Math.round(Math.random()));
+      features.push(200 - 400 * Math.round(Math.random()));
 
       return features;
     }
@@ -294,8 +310,8 @@
       var speed = 100;
 
       var currentFeatures = [
-        sensorDistanceFL,
-        sensorDistanceFR,
+        sensorDistanceFL > 100 ? 1 : 0,
+        sensorDistanceFR > 100 ? 1 : 0,
         car.angle,
         car.speed
       ];
