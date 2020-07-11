@@ -46,6 +46,49 @@
   src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script>
+  class Nomarlizer {
+    normalizeSensorDistance(sensorDistance) {
+      return (sensorDistance) / 200;
+    }
+
+    normalizeSpeed(speed) {
+      return (10 + speed) / 20;
+    }
+
+    normalizeAngle(angle) {
+      return (Math.PI + angle) / (2 * Math.PI);
+    }
+
+    normalizeInput(input) {
+      return input > 0 ? 1 : 0;
+    }
+
+    normalizeFeatures(features) {
+      return [
+        this.normalizeSensorDistance(features[0]),
+        this.normalizeSensorDistance(features[1]),
+        this.normalizeAngle(features[2]),
+        this.normalizeSpeed(features[3]),
+        this.normalizeSensorDistance(features[4]),
+        this.normalizeSensorDistance(features[5]),
+        this.normalizeAngle(features[6]),
+        this.normalizeSpeed(features[7]),
+        this.normalizeInput(features[8]),
+        this.normalizeInput(features[9])
+      ];
+    }
+
+    normalizeLabels(labels) {
+      return [
+        labels[0] > 100 ? 0 : 1,
+        labels[1] > 100 ? 0 : 1,
+        labels[2] > 0.5 ? 0 : 1,
+      ];
+    }
+   }
+   normalizer = new Nomarlizer();
+</script>
+<script>
   var trainingQueue = [],
     inTraining = false,
     experience = 0,
@@ -53,7 +96,9 @@
   // create the model
   const model = tf.sequential();
   model.add(tf.layers.dense({ units: 10, inputShape: [10] }));
-  model.add(tf.layers.dense({ units: 3, inputShape: [10], activation: 'sigmoid' }));
+  model.add(tf.layers.dense({ units: 10, inputShape: [10] }));
+  model.add(tf.layers.dense({ units: 6, inputShape: [10] }));
+  model.add(tf.layers.dense({ units: 3, inputShape: [6], activation: 'sigmoid' }));
   model.compile({ loss: 'meanSquaredError', optimizer: 'sgd', metrics: ['accuracy'] });
   latest_loss = 1;
   latest_accuracy = 0;
@@ -240,7 +285,7 @@
         console.log('Nothing to train on or already in training.')
         return;
       }
-      trainingSet = trainingQueue.shift();
+      trainingSet = trainingQueue.shift().slice();
       var featureData = trainingSet[0];
       var labelData = trainingSet[1];
       document.getElementById('train_queued').innerHTML = trainingQueue.length;
@@ -289,8 +334,8 @@
             testFeatures.push(speedOptions[i]);
             testFeatures.push(speedOptions[j]);
 
-            predictions = model.predict(tf.tensor2d(testFeatures, [1, testFeatures.length]));
-            if (predictions.dataSync()[0] > 0.5 && predictions.dataSync()[1] > 0.5 && predictions.dataSync()[2] > 0.5) {
+            predictions = model.predict(tf.tensor2d(normalizer.normalizeFeatures(testFeatures), [1, testFeatures.length]));
+            if (predictions.dataSync()[2] > 0.5) {
               if(Math.random() > latest_loss) {
                 document.getElementById('feature-log').innerHTML = JSON.stringify(testFeatures);
               }
@@ -310,21 +355,21 @@
       var speed = 100;
 
       var currentFeatures = [
-        sensorDistanceFL > 100 ? 1 : 0,
-        sensorDistanceFR > 100 ? 1 : 0,
+        sensorDistanceFL,
+        sensorDistanceFR,
         car.angle,
         car.speed
       ];
       features = previousFeatures.concat(currentFeatures);
       previousFeatures = currentFeatures;
 
-      featureData.push(features);
+      featureData.push(normalizer.normalizeFeatures(features));
 
-      labelData.push([
-        sensorDistanceFL > 100 ? 1 : 0,
-        sensorDistanceFR > 100 ? 1 : 0,
-        car.speed > 0.1 ? 1 : 0
-      ]);
+      labelData.push(normalizer.normalizeLabels([
+        sensorDistanceFL ,
+        sensorDistanceFR ,
+        car.speed
+      ]));
 
       features = getModelControl(features);
       leftSpeed = features[features.length - 2];
