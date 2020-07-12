@@ -67,14 +67,16 @@
       return [
         this.normalizeSensorDistance(features[0]),
         this.normalizeSensorDistance(features[1]),
-        this.normalizeAngle(features[2]),
-        this.normalizeSpeed(features[3]),
-        this.normalizeSensorDistance(features[4]),
+        this.normalizeSensorDistance(features[2]),
+        this.normalizeAngle(features[3]),
+        this.normalizeSpeed(features[4]),
         this.normalizeSensorDistance(features[5]),
-        this.normalizeAngle(features[6]),
-        this.normalizeSpeed(features[7]),
-        this.normalizeInput(features[8]),
-        this.normalizeInput(features[9])
+        this.normalizeSensorDistance(features[6]),
+        this.normalizeSensorDistance(features[7]),
+        this.normalizeAngle(features[8]),
+        this.normalizeSpeed(features[9]),
+        this.normalizeInput(features[10]),
+        this.normalizeInput(features[11])
       ];
     }
 
@@ -82,7 +84,8 @@
       return [
         labels[0] > 100 ? 0 : 1,
         labels[1] > 100 ? 0 : 1,
-        labels[2] > 0.5 ? 0 : 1,
+        labels[2] > 100 ? 0 : 1,
+        labels[3] > 0.1 ? 0 : 1,
       ];
     }
    }
@@ -95,10 +98,10 @@
     evolutionChart;
   // create the model
   const model = tf.sequential();
-  model.add(tf.layers.dense({ units: 10, inputShape: [10] }));
-  model.add(tf.layers.dense({ units: 10, inputShape: [10] }));
-  model.add(tf.layers.dense({ units: 6, inputShape: [10] }));
-  model.add(tf.layers.dense({ units: 3, inputShape: [6], activation: 'sigmoid' }));
+  model.add(tf.layers.dense({ units: 12, inputShape: [12] }));
+  model.add(tf.layers.dense({ units: 12, inputShape: [12] }));
+  model.add(tf.layers.dense({ units: 8, inputShape: [12] }));
+  model.add(tf.layers.dense({ units: 4, inputShape: [8], activation: 'sigmoid' }));
   model.compile({ loss: 'meanSquaredError', optimizer: 'sgd', metrics: ['accuracy'] });
   latest_loss = 1;
   latest_accuracy = 0;
@@ -112,12 +115,12 @@
       Events = Matter.Events,
       Query = Matter.Query,
       Composite = Matter.Composite,
-      sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 200,
+      sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 200,
       maxSpeed = 200,
       timer = 0,
       maxTimer = 10000,
       multiplier = 1,
-      previousFeatures = [0, 0, 0, 0];
+      previousFeatures = [0, 0, 0, 0, 0];
     featureData = [],
       labelData = [];
 
@@ -149,6 +152,7 @@
       carWheelBL = Bodies.rectangle(carX + carLength / 2 - carLength / 3.5, carY - carWidth / 2, carLength / 3.5, carWidth / 3.5),
       carWheelFR = Bodies.rectangle(carX - carLength / 2 + carLength / 3.5, carY + carWidth / 2, carLength / 3.5, carWidth / 3.5),
       carWheelBR = Bodies.rectangle(carX + carLength / 2 - carLength / 3.5, carY + carWidth / 2, carLength / 3.5, carWidth / 3.5),
+      sensorFM = Bodies.circle(carX + carLength / 2 - carLength / 15, carY, sensorRadius),
       sensorFL = Bodies.circle(carX + carLength / 2 - carLength / 15, carY - carWidth / 2 + carLength * 2 / 15, sensorRadius),
       sensorFR = Bodies.circle(carX + carLength / 2 - carLength / 15, carY + carWidth / 2 - carLength * 2 / 15, sensorRadius),
       car = Body.create({
@@ -158,6 +162,7 @@
           carWheelBL,
           carWheelFR,
           carWheelBR,
+          sensorFM,
           sensorFL,
           sensorFR
         ]
@@ -192,15 +197,19 @@
       var sensorRange = 200,
         context = render.context,
         bodies = obstacles,
+        startPointFM = sensorFM.position,
         startPointFL = sensorFL.position,
         startPointFR = sensorFR.position,
+        sensorAngleFM = car.angle,
         sensorAngleFL = car.angle - 0.785,
         sensorAngleFR = car.angle + 0.785,
+        endPointFM = { x: sensorFL.position.x + sensorRange * Math.cos(sensorAngleFM), y: sensorFL.position.y + sensorRange * Math.sin(sensorAngleFM) },
         endPointFL = { x: sensorFL.position.x + sensorRange * Math.cos(sensorAngleFL), y: sensorFL.position.y + sensorRange * Math.sin(sensorAngleFL) },
         endPointFR = { x: sensorFR.position.x + sensorRange * Math.cos(sensorAngleFR), y: sensorFR.position.y + sensorRange * Math.sin(sensorAngleFR) };
 
 
-      sensorDistanceFL = sensorDistanceFR = sensorRange;
+      sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorRange;
+      var collisionsFM = Query.ray(bodies, startPointFM, endPointFM);
       var collisionsFL = Query.ray(bodies, startPointFL, endPointFL);
       var collisionsFR = Query.ray(bodies, startPointFR, endPointFR);
 
@@ -225,8 +234,28 @@
 
       context.lineWidth = 0.5;
       context.stroke();
+      context.fillStyle = 'rgba(255,165,0,0.7)';
+      context.fill();
 
+      context.beginPath();
+      context.moveTo(startPointFM.x, startPointFM.y);
 
+      if (collisionsFM.length > 0) {
+        context.strokeStyle = '#fff';
+      } else {
+        context.strokeStyle = '#555';
+      }
+
+      for (var i = 0; i < collisionsFM.length; i++) {
+        var collision = collisionsFM[i];
+        context.lineTo(collision.supports[0].x, collision.supports[0].y);
+        context.rect(collision.bodyA.position.x - 4.5, collision.bodyA.position.y - 4.5, 8, 8);
+        sensorDistanceFM = Math.sqrt(Math.pow(sensorFM.position.x - collision.bodyA.position.x, 2) + Math.pow(sensorFM.position.y - collision.bodyA.position.y, 2));
+        break;
+      }
+
+      context.lineWidth = 0.5;
+      context.stroke();
       context.fillStyle = 'rgba(255,165,0,0.7)';
       context.fill();
 
@@ -248,8 +277,6 @@
 
       context.lineWidth = 0.5;
       context.stroke();
-
-
       context.fillStyle = 'rgba(255,165,0,0.7)';
       context.fill();
 
@@ -301,7 +328,7 @@
       featureLength = featureData[featureData.length - 1].length;
       try {
         const xs = tf.tensor2d(featureData, [featureData.length, featureLength]);
-        const ys = tf.tensor2d(labelData, [labelData.length, 3]);
+        const ys = tf.tensor2d(labelData, [labelData.length, 4]);
 
 
         // Train the model using the data.
@@ -335,10 +362,8 @@
             testFeatures.push(speedOptions[j]);
 
             predictions = model.predict(tf.tensor2d(normalizer.normalizeFeatures(testFeatures), [1, testFeatures.length]));
-            if (predictions.dataSync()[2] > 0.5) {
-              if(Math.random() > latest_loss) {
-                document.getElementById('feature-log').innerHTML = JSON.stringify(testFeatures);
-              }
+            if (predictions.dataSync()[2] > 0.1) {
+              document.getElementById('feature-log').innerHTML = JSON.stringify(testFeatures);
               return testFeatures;
             }
           }
@@ -355,6 +380,7 @@
       var speed = 100;
 
       var currentFeatures = [
+        sensorDistanceFM,
         sensorDistanceFL,
         sensorDistanceFR,
         car.angle,
@@ -366,6 +392,7 @@
       featureData.push(normalizer.normalizeFeatures(features));
 
       labelData.push(normalizer.normalizeLabels([
+        sensorDistanceFM ,
         sensorDistanceFL ,
         sensorDistanceFR ,
         car.speed
@@ -421,7 +448,7 @@
           },
           {
             label: 'acc',
-            yAxisID: 'y-axis-2',
+            yAxisID: 'y-axis-1',
             fill: false,
             borderColor: "#16A085",
             data: []
@@ -440,17 +467,6 @@
               display: true,
               position: "left",
               id: "y-axis-1",
-            },
-            {
-              type: "linear", // only linear but allow scale type registration. This allows extensions to exist solely for log scale for instance
-              display: true,
-              position: "right",
-              id: "y-axis-2",
-
-              // grid line settings
-              gridLines: {
-                drawOnChartArea: false, // only want the grid lines for one axis to show up
-              },
             }
           ],
         }
