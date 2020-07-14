@@ -51,8 +51,16 @@
       return (sensorDistance) / 200;
     }
 
+    denormalizeSensorDistance(prediction) {
+      return (prediction) * 200;
+    }
+
     normalizeSpeed(speed) {
       return (10 + speed) / 20;
+    }
+
+    denormalizeSpeed(prediction) {
+      return prediction * 20 - 10;
     }
 
     normalizeAngle(angle) {
@@ -82,10 +90,10 @@
 
     normalizeLabels(labels) {
       return [
-        labels[0] > 100 ? 0 : 1,
-        labels[1] > 100 ? 0 : 1,
-        labels[2] > 100 ? 0 : 1,
-        labels[3] > 0.1 ? 0 : 1,
+        this.normalizeSensorDistance(labels[0]),
+        this.normalizeSensorDistance(labels[1]),
+        this.normalizeSensorDistance(labels[2]),
+        this.normalizeSpeed(labels[3]),
       ];
     }
    }
@@ -98,9 +106,9 @@
     evolutionChart;
   // create the model
   const model = tf.sequential();
-  model.add(tf.layers.dense({ units: 12, inputShape: [12] }));
-  model.add(tf.layers.dense({ units: 12, inputShape: [12] }));
-  model.add(tf.layers.dense({ units: 8, inputShape: [12] }));
+  model.add(tf.layers.dense({ units: 12, inputShape: [12], activation: 'relu' }));
+  model.add(tf.layers.dense({ units: 12, inputShape: [12], activation: 'relu'  }));
+  model.add(tf.layers.dense({ units: 8, inputShape: [12], activation: 'relu'  }));
   model.add(tf.layers.dense({ units: 4, inputShape: [8], activation: 'sigmoid' }));
   model.compile({ loss: 'meanSquaredError', optimizer: 'sgd', metrics: ['accuracy'] });
   latest_loss = 1;
@@ -362,7 +370,11 @@
             testFeatures.push(speedOptions[j]);
 
             predictions = model.predict(tf.tensor2d(normalizer.normalizeFeatures(testFeatures), [1, testFeatures.length]));
-            if (predictions.dataSync()[2] > 0.1) {
+            predictionDistanceFM = predictions.dataSync()[0];
+            predictionDistanceFL = predictions.dataSync()[1];
+            predictionDistanceFR = predictions.dataSync()[2];
+            predtictionSpeed = predictions.dataSync()[3];
+            if (normalizer.denormalizeSensorDistance(predictionDistanceFM) > 100) {
               document.getElementById('feature-log').innerHTML = JSON.stringify(testFeatures);
               return testFeatures;
             }
