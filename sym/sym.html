@@ -26,6 +26,8 @@
         </div>
         <div id="canvas-container" width="100px">
         </div>
+        <div id="high-score" width="100px">
+        </div>
 
       </div>
     </div>
@@ -108,10 +110,106 @@
    normalizer = new Nomarlizer();
 </script>
 <script>
+  class InputListener {
+    leftKeyPressed = false;
+    rightKeyPressed = false;
+    forwardKeyPressed = false;
+    backKeyPressed = false;
+    listen() {
+      var instance = this;
+      $('body').on('keydown', function(e) {
+          if (e.which === 37) { 
+            instance.leftKeyPressed = true;
+          } else if (e.which === 39) { 
+            instance.rightKeyPressed = true;
+          } else if (e.which === 38) { 
+            instance.forwardKeyPressed = true;
+          } else if (e.which === 40) { 
+            instance.backKeyPressed = true;
+          }
+      });
+      $('body').on('keyup', function(e) {
+          if (e.which === 37) { 
+            instance.leftKeyPressed = false;
+          } else if (e.which === 39) {
+            instance.rightKeyPressed = false;
+          } else if (e.which === 38) { 
+            instance.forwardKeyPressed = false;
+          } else if (e.which === 40) { 
+            instance.backKeyPressed = false;
+          }
+      });
+    }
+  }
+
+  listener = new InputListener();
+  listener.listen();
+</script>
+<script>
+  class Collider {
+    constructor (Bodies, Body, car, sensor, angleOffset) {
+      this.Bodies = Bodies;
+      this.Body = Body;
+      this.car = car;
+      this.sensor = sensor;
+      this.angleOffset = angleOffset;
+      this.velocity = 20;
+      this.length = 5;
+    }
+
+    getBody() {
+      if(this.body === undefined) {
+        this.body = this.Bodies.circle(this.sensor.position.x, this.sensor.position.y, this.length, {
+        isSensor: true,
+        isStatic: false,
+        frictionAir: 0,
+        render: {
+            strokeStyle: 'red',
+            fillStyle: '#111111',
+            lineWidth: 0
+          }
+        });
+        this.Body.setVelocity(this.body, { x:  this.velocity * Math.cos(this.car.angle + this.angleOffset), y:  this.velocity * Math.sin(this.car.angle + this.angleOffset) });
+      }
+      
+      return this.body;
+    }
+
+    reset() {
+      this.Body.setPosition(this.body, this.sensor.position);
+      this.Body.setVelocity(this.body, { x:  this.velocity * Math.cos(this.car.angle + this.angleOffset), y:  this.velocity * Math.sin(this.car.angle + this.angleOffset) });
+    }
+
+    getSensorDistance(pair, label) {
+      var sensorDistance = 200;
+      var distances = [];
+      if(this.car.parts.includes(pair.bodyA) || this.car.parts.includes.bodyB) {
+        return sensorDistance;
+      }
+      if (pair.bodyA === this.body || pair.bodyB === this.body) {
+        var contacts = Object.entries(pair.contacts);
+        for(i=0; i<contacts.length; i++) {
+          var contact = contacts[0][1];
+          var distance = Math.sqrt(Math.pow(this.sensor.position.x - contact.vertex.x, 2) + Math.pow(this.sensor.position.y - contact.vertex.y, 2));
+          distances.push(distance);
+        }
+        sensorDistance = Math.min(...distances);
+        console.log(label + ':' + sensorDistance);
+        this.reset();
+      }
+      return sensorDistance;
+    }
+  }
+</script>
+<script>
   var trainingQueue = [],
     inTraining = false,
+    iteration = 0,
     experience = 0,
-    evolutionChart;
+    qSpeedTop = 0,
+    testRun = false,
+    evolutionChart,
+    highScoreChart;
   // create the model
   const model = tf.sequential();
   model.add(tf.layers.dense({ units: 10, inputShape: [10], activation: 'relu' }));
@@ -140,6 +238,7 @@
       featureData = [],
       labelData = []
       qSpeed = 0,
+      qSpeedMax = 0,
       qSpeedDecay = 1,
       previousSensorDistanceFM = 0;
 
@@ -152,10 +251,11 @@
       element: document.getElementById('environment'),
       engine: engine,
       options: {
-        showAngleIndicator: true,
-        showDebug: true,
-        showVelocity: true,
-        showCollisions: true,
+        showAngleIndicator: false,
+        showDebug: false,
+        showVelocity: false,
+        showCollisions: false,
+        wireframes: false
       }
     });
 
@@ -188,23 +288,33 @@
       });
     car.frictionAir = 0.1;
 
+    var colliderFM = new Collider(Bodies, Body, car, sensorFM, 0);
+    var sensorFMCollider = colliderFM.getBody();
+    var colliderFL = new Collider(Bodies, Body, car, sensorFM, Math.PI/4);
+    var sensorFLCollider = colliderFL.getBody();
+    var colliderFR = new Collider(Bodies, Body, car, sensorFM, -Math.PI/4);
+    var sensorFRCollider = colliderFR.getBody();
+
     // create two boxes and a ground
     var boxes = [];
-    for (i = 0; i < (1 - latest_loss) * 10; i++) {
-      var box = Bodies.rectangle(800 * Math.random(), 600 * Math.random(), 100 * Math.random(), 100 * Math.random(), { isStatic: true });
+    for (i = 0; i < experience/10; i++) {
+      var box = Bodies.rectangle(800 * Math.random(), 600 * Math.random(), 100 + 100 * Math.random(), 100 + 100 * Math.random(), { isStatic: true });
       boxes.push(box);
     }
 
-    var wallB = Bodies.rectangle(400, 610, 810, 60, { isStatic: true });
-    var wallT = Bodies.rectangle(400, 0, 810, 30, { isStatic: true });
-    var wallL = Bodies.rectangle(0, 305, 60, 810, { isStatic: true });
-    var wallR = Bodies.rectangle(800, 305, 60, 810, { isStatic: true });
+    var wallB = Bodies.rectangle(400, 600, 810, 100, { isStatic: true });
+    var wallT = Bodies.rectangle(400, 0, 810, 100, { isStatic: true });
+    var wallL = Bodies.rectangle(0, 305, 100, 810, { isStatic: true });
+    var wallR = Bodies.rectangle(800, 305, 100, 810, { isStatic: true });
     boxes.push(wallB);
     boxes.push(wallT);
     boxes.push(wallL);
     boxes.push(wallR);
 
     var obstacles = boxes.slice();
+    boxes.push(sensorFMCollider);
+    boxes.push(sensorFLCollider);
+    boxes.push(sensorFRCollider);
     boxes.push(car);
 
 
@@ -222,84 +332,22 @@
         sensorAngleFM = car.angle,
         sensorAngleFL = car.angle - 0.785,
         sensorAngleFR = car.angle + 0.785,
-        endPointFM = { x: sensorFL.position.x + sensorRange * Math.cos(sensorAngleFM), y: sensorFL.position.y + sensorRange * Math.sin(sensorAngleFM) },
+        endPointFM = { x: sensorFM.position.x + sensorRange * Math.cos(sensorAngleFM), y: sensorFL.position.y + sensorRange * Math.sin(sensorAngleFM) },
         endPointFL = { x: sensorFL.position.x + sensorRange * Math.cos(sensorAngleFL), y: sensorFL.position.y + sensorRange * Math.sin(sensorAngleFL) },
         endPointFR = { x: sensorFR.position.x + sensorRange * Math.cos(sensorAngleFR), y: sensorFR.position.y + sensorRange * Math.sin(sensorAngleFR) };
+    });
 
+    Events.on(engine, 'collisionStart', function(event) {
+        var pairs = event.pairs;
+        
+        for (var i = 0, j = pairs.length; i != j; ++i) {
+            var pair = pairs[i];
 
-      sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorRange;
-      var collisionsFM = Query.ray(bodies, startPointFM, endPointFM);
-      var collisionsFL = Query.ray(bodies, startPointFL, endPointFL);
-      var collisionsFR = Query.ray(bodies, startPointFR, endPointFR);
-
-      Render.startViewTransform(render);
-
-      context.beginPath();
-      context.moveTo(startPointFL.x, startPointFL.y);
-
-      if (collisionsFL.length > 0) {
-        context.strokeStyle = '#fff';
-      } else {
-        context.strokeStyle = '#555';
-      }
-
-      for (var i = 0; i < collisionsFL.length; i++) {
-        var collision = collisionsFL[i];
-        context.lineTo(collision.supports[0].x, collision.supports[0].y);
-        context.rect(collision.bodyA.position.x - 4.5, collision.bodyA.position.y - 4.5, 8, 8);
-        sensorDistanceFL = Math.sqrt(Math.pow(sensorFL.position.x - collision.bodyA.position.x, 2) + Math.pow(sensorFL.position.y - collision.bodyA.position.y, 2));
-        break;
-      }
-
-      context.lineWidth = 0.5;
-      context.stroke();
-      context.fillStyle = 'rgba(255,165,0,0.7)';
-      context.fill();
-
-      context.beginPath();
-      context.moveTo(startPointFM.x, startPointFM.y);
-
-      if (collisionsFM.length > 0) {
-        context.strokeStyle = '#fff';
-      } else {
-        context.strokeStyle = '#555';
-      }
-
-      for (var i = 0; i < collisionsFM.length; i++) {
-        var collision = collisionsFM[i];
-        context.lineTo(collision.supports[0].x, collision.supports[0].y);
-        context.rect(collision.bodyA.position.x - 4.5, collision.bodyA.position.y - 4.5, 8, 8);
-        sensorDistanceFM = Math.sqrt(Math.pow(sensorFM.position.x - collision.bodyA.position.x, 2) + Math.pow(sensorFM.position.y - collision.bodyA.position.y, 2));
-        break;
-      }
-
-      context.lineWidth = 0.5;
-      context.stroke();
-      context.fillStyle = 'rgba(255,165,0,0.7)';
-      context.fill();
-
-      context.beginPath();
-      context.moveTo(startPointFR.x, startPointFR.y);
-      if (collisionsFR.length > 0) {
-        context.strokeStyle = '#fff';
-      } else {
-        context.strokeStyle = '#555';
-      }
-
-      for (var i = 0; i < collisionsFR.length; i++) {
-        var collision = collisionsFR[i];
-        context.lineTo(collision.supports[0].x, collision.supports[0].y);
-        context.rect(collision.bodyA.position.x - 4.5, collision.bodyA.position.y - 4.5, 8, 8);
-        sensorDistanceFR = Math.sqrt(Math.pow(sensorFR.position.x - collision.bodyA.position.x, 2) + Math.pow(sensorFR.position.y - collision.bodyA.position.y, 2));
-        break;
-      }
-
-      context.lineWidth = 0.5;
-      context.stroke();
-      context.fillStyle = 'rgba(255,165,0,0.7)';
-      context.fill();
-
-      Render.endViewTransform(render);
+            sensorDistanceFM = colliderFM.getSensorDistance(pair, 'sensorFM');
+            sensorDistanceFL = colliderFL.getSensorDistance(pair, 'sensorFL');
+            sensorDistanceFR = colliderFR.getSensorDistance(pair, 'sensorFR');
+            
+        }
     });
 
     // run the engine
@@ -308,8 +356,16 @@
     // run the renderer
     Render.run(render);
 
-    function reset() {
-      enqueueForTraining(featureData, labelData);
+    function reset(test = false) {
+      testRun = test;
+      if(qSpeedMax > 10) {
+        testRun = true;
+        qSpeedTop = qSpeedMax;
+        pushToHighScoreChart(iteration, qSpeedMax);
+        qSpeedMax = 0;
+        enqueueForTraining(featureData, labelData);
+      }  
+      iteration ++;
       qSpeed = 0;
       featureData = [];
       labelData = [];
@@ -375,7 +431,7 @@
     }
 
     function getModelControl(features) {
-      if (Math.random() > (10 - experience % 10) / 10) {
+      if (testRun || (Math.random() > (10 - experience % 10) / 10)) {
         predictions = model.predict(tf.tensor2d(normalizer.normalizeFeatures(features), [1, features.length]));
         leftSpeed = normalizer.denormalizeControlSpeed(predictions.dataSync()[0]);
         rightSpeed = normalizer.denormalizeControlSpeed(predictions.dataSync()[1]);
@@ -386,9 +442,31 @@
       }
 
       return [
-        200 - 400 * Math.round(Math.random()),
-        200 - 400 * Math.round(Math.random())
+        250 - 400 * Math.round(Math.random()),
+        250 - 400 * Math.round(Math.random())
       ];
+
+      leftSpeed = 0;
+      rightSpeed = 0;
+      if(listener.forwardKeyPressed) {
+        leftSpeed = 100;
+        rightSpeed = 100;
+      }
+      if(listener.leftKeyPressed) {
+        leftSpeed = -100; 
+      }
+      if(listener.rightKeyPressed) {
+        rightSpeed = -100; 
+      }
+      if(listener.backKeyPressed) {
+        leftSpeed = -100;
+        rightSpeed = -100;
+      }
+
+      return [
+        leftSpeed,
+        rightSpeed
+      ]
     }
 
     function addInput() {
@@ -401,7 +479,6 @@
         car.angle,
         car.speed
       ];
-      qSpeed += car.speed - qSpeedDecay;
       features = previousFeatures.concat(currentFeatures);
       previousFeatures = currentFeatures;
 
@@ -409,17 +486,13 @@
       leftSpeed = control[0];
       rightSpeed = control[1];
 
-      if(sensorDistanceFM > previousSensorDistanceFM) {
-        featureData.push(normalizer.normalizeFeatures(features));
-        labelData.push(normalizer.normalizeLabels([
-          leftSpeed ,
-          rightSpeed
-        ]));
-      }
+      featureData.push(normalizer.normalizeFeatures(features));
+      labelData.push(normalizer.normalizeLabels([
+        leftSpeed ,
+        rightSpeed
+      ]));
+      
       previousSensorDistanceFM = sensorDistanceFM;
-
-      leftSpeed += 50;
-      rightSpeed += 50;
 
       if (!isNaN(sensorDistanceFR)) {
         leftForce = leftSpeed / 40000 * multiplier;
@@ -434,9 +507,13 @@
       Body.applyForce(car, { x: car.position.x + carLength * Math.sin(car.angle) / 2, y: car.position.y - carWidth * Math.cos(car.angle) / 2 }, { x: leftForce * Math.cos(car.angle), y: leftForce * Math.sin(car.angle) });
       Body.applyForce(car, { x: car.position.x - carLength * Math.sin(car.angle) / 2, y: car.position.y + carWidth * Math.cos(car.angle) / 2 }, { x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle) });
 
-      timer += 50;
+      qSpeed += car.speed;
+      qSpeed -= qSpeedDecay;
+
+      qSpeedMax = Math.max(qSpeed, qSpeedMax);
+      // qSpeed -= 200 - Math.min(200, sensorDistanceFM);
       document.getElementById('q_speed').innerHTML = qSpeed;
-      if (timer > maxTimer || qSpeed < -10) {
+      if (qSpeed < -10 || featureData.length > 200) {
         reset();
         return;
       }
@@ -502,5 +579,53 @@
   createChart();
 
 </script>
+
+<script>
+    function createHighScoreChart() {
+      var canvasContainer = document.getElementById('high-score');
+      var canvas = document.createElement("CANVAS");
+      canvas.width = 100;
+      canvas.height = 100;
+      canvasContainer.appendChild(canvas);
+      highScoreChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'score',
+              yAxisID: 'y-axis-1',
+              fill: false,
+              borderColor: "#E74C3C",
+              data: []
+            }
+          ]
+        },
+        options: {
+          title: {
+            display: true,
+            text: 'High Score'
+          },
+          scales: {
+            yAxes: [
+              {
+                type: "linear", 
+                display: true,
+                position: "left",
+                id: "y-axis-1",
+              }
+            ],
+          }
+        }
+      });
+    }
+    function pushToHighScoreChart(epoch, score) {
+      highScoreChart.data.labels.push(epoch);
+      highScoreChart.data.datasets[0].data.push(score);
+      highScoreChart.update();
+    }
+    createHighScoreChart();
+  
+  </script>
 
 </html>
