@@ -205,7 +205,8 @@
 <script>
   class Nomarlizer {
     normalizeSensorDistance(sensorDistance) {
-      return (Math.min(sensorDistance, 200)) / 200;
+      sensorDistance = Math.round(sensorDistance/10);
+      return sensorDistance / 20;
     }
 
     normalizeFeatures(features) {
@@ -423,6 +424,7 @@
     let Engine = Matter.Engine,
       Render = Matter.Render,
       World = Matter.World,
+      Events = Matter.Events,
       Bodies = Matter.Bodies,
       Body = Matter.Body,
       sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 200,
@@ -472,7 +474,11 @@
           sensorFL,
           sensorFR
         ]
-      });
+      }),
+      collisions = 0;
+
+    let obstacles = localStorage.getItem('obstacles') ?? 0;
+
     let previousState = [],
       previousAction = 0,
       previousReward = 0;
@@ -482,15 +488,14 @@
     // create two boxes and a ground
     let boxes = [];
 
-    for (i = 0; i < experience / 10; i++) {
+    for (i = 0; i < obstacles; i++) {
       let box = Bodies.rectangle(800 * Math.random(), 600 * Math.random(), 100 + 100 * Math.random(), 100 + 100 * Math.random(), {isStatic: true});
       boxes.push(box);
     }
-    let wallB = Bodies.rectangle(400, 600, 810, 100, {isStatic: true});
-
-    let wallT = Bodies.rectangle(400, 0, 810, 100, {isStatic: true});
-    let wallL = Bodies.rectangle(0, 305, 100, 810, {isStatic: true});
-    let wallR = Bodies.rectangle(800, 305, 100, 810, {isStatic: true});
+    let wallB = Bodies.rectangle(400, 600, 810, 20, {isStatic: true});
+    let wallT = Bodies.rectangle(400, 0, 810, 20, {isStatic: true});
+    let wallL = Bodies.rectangle(0, 305, 20, 810, {isStatic: true});
+    let wallR = Bodies.rectangle(800, 305, 20, 810, {isStatic: true});
     boxes.push(wallB);
     boxes.push(wallT);
     boxes.push(wallL);
@@ -504,6 +509,10 @@
 
     // add all of the bodies to the world
     World.add(engine.world, boxes);
+
+    Events.on(engine, 'collisionStart', function (event) {
+      collisions++;
+    });
 
     // run the engine
     Engine.run(engine);
@@ -583,6 +592,13 @@
       pushToHighScoreChart(actorCritic.epoch, reward);
       if (actorCritic.epoch > 400) {
         actorCritic.save();
+        if(collisions > 0) {
+          obstacles--;
+          obstacles = Math.max(obstacles, 0);
+        } else {
+          obstacles += 1;
+        }
+        localStorage.setItem('obstacles', obstacles);
         location.reload();
       }
 
