@@ -9,14 +9,18 @@
 <div class="container">
   <div class="row">
     <div class="col">
-      <div id="environment"></div>
-    </div>
-    <div class="col">
+      <div id="name"></div>
       <div id="canvas-container">
       </div>
+    </div>
+    <div class="col">
       <div id="high-score">
       </div>
-
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <div id="environment"></div>
     </div>
   </div>
   <div class="row">
@@ -29,6 +33,7 @@
 </div>
 </body>
 <script src="js/matter.min.js"></script>
+<script src="js/raycast.min.js"></script>
 <script src="js/chance.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js"></script>
 
@@ -45,7 +50,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script>
   class ActorCritic {
-    constructor(stateSize, actionSize) {
+    constructor(stateSize, actionSize, reset) {
       this.render = false;
       this.stateSize = stateSize;
       this.actionSize = actionSize;
@@ -55,8 +60,14 @@
       this.actorLearningRate = 0.001;
       this.criticLearningRate = 0.005;
 
-      this.actor = this.buildActor();
-      this.critic = this.buildCritic();
+      if(!reset) {
+        this.load();
+      }
+
+      this.actor = this.actor ?? this.buildActor();
+      this.critic = this.critic ?? this.buildCritic();
+      this.name = this.name ?? new Date().toLocaleString('en-in');
+
 
       this.epoch = 0;
       this.latestActorLoss = 0;
@@ -106,12 +117,16 @@
         kernelInitializer: 'glorotUniform',
       }));
 
+      this.compile(model);
+
+      return model;
+    }
+
+    compile(model) {
       model.compile({
         optimizer: tf.train.adam(this.criticLearningRate),
         loss: tf.losses.meanSquaredError,
       });
-
-      return model;
     }
 
     getAction(state, actions) {
@@ -159,9 +174,33 @@
       pushToEvolutionChart(this.epoch, this.latestActorLoss, this.latestCriticLoss);
       this.epoch++;
     }
+
+    save() {
+      this.actor.save('localstorage://actor');
+      this.critic.save('localstorage://critic');
+      localStorage.setItem('name', this.name);
+    }
+
+    load() {
+      let name = localStorage.getItem('name');
+      if (name != "undefined") {
+        tf.loadLayersModel('localstorage://actor').then(model => {
+          this.compile(model);
+          this.actor = model;
+        });
+        tf.loadLayersModel('localstorage://critic').then(model => {
+          this.compile(model);
+          this.critic = model;
+        });
+
+        this.name = name;
+      }
+    }
   }
 
-  var actorCritic = new ActorCritic(3, 4);
+  var actorCritic = new ActorCritic(3, 4, window.location.hash.substr(1) === 'reset');
+  document.getElementById("name").innerHTML = actorCritic.name;
+
 </script>
 <script>
   class Nomarlizer {
@@ -219,62 +258,29 @@
 </script>
 <script>
   class Collider {
-    constructor(Bodies, Body, car, sensor, angleOffset) {
-      this.Bodies = Bodies;
-      this.Body = Body;
+    constructor(boxes, car, sensor, name, angleOffset) {
+      this.boxes = boxes.slice();
       this.car = car;
       this.sensor = sensor;
+      this.name = name;
       this.angleOffset = angleOffset;
-      this.velocity = 20;
-      this.length = 5;
     }
 
-    getBody() {
-      if (this.body === undefined) {
-        this.body = this.Bodies.circle(this.sensor.position.x, this.sensor.position.y, this.length, {
-          isSensor: true,
-          isStatic: false,
-          frictionAir: 0,
-          render: {
-            strokeStyle: 'red',
-            fillStyle: '#111111',
-            lineWidth: 0
-          }
-        });
-        this.Body.setVelocity(this.body, {
-          x: this.velocity * Math.cos(this.car.angle + this.angleOffset),
-          y: this.velocity * Math.sin(this.car.angle + this.angleOffset)
-        });
-      }
+    getSensorDistance() {
+      let sensorDistance = 200;
 
-      return this.body;
-    }
-
-    reset() {
-      this.Body.setPosition(this.body, this.sensor.position);
-      this.Body.setVelocity(this.body, {
-        x: this.velocity * Math.cos(this.car.angle + this.angleOffset),
-        y: this.velocity * Math.sin(this.car.angle + this.angleOffset)
-      });
-    }
-
-    getSensorDistance(pair, label) {
-      var sensorDistance = 200;
-      var distances = [];
-      if (this.car.parts.includes(pair.bodyA) || this.car.parts.includes.bodyB) {
-        return sensorDistance;
-      }
-      if (pair.bodyA === this.body || pair.bodyB === this.body) {
-        var contacts = Object.entries(pair.contacts);
-        for (let i = 0; i < contacts.length; i++) {
-          var contact = contacts[0][1];
-          var distance = Math.sqrt(Math.pow(this.sensor.position.x - contact.vertex.x, 2) + Math.pow(this.sensor.position.y - contact.vertex.y, 2));
-          distances.push(distance);
+      let raycastCollisions = raycast(this.boxes, this.sensor.position,
+        {
+          x: this.sensor.position.x + sensorDistance * Math.cos(this.car.angle + this.angleOffset),
+          y: this.sensor.position.y + sensorDistance * Math.sin(this.car.angle + this.angleOffset)
         }
-        sensorDistance = Math.min(...distances);
-        // console.log(label + ':' + sensorDistance);
-        this.reset();
+      );
+      if(raycastCollisions.length > 0) {
+        let firstHit = raycastCollisions[0];
+        sensorDistance = Math.sqrt(Math.pow(this.sensor.position.x - firstHit.point.x, 2)
+          + Math.pow(this.sensor.position.y - firstHit.point.y, 2));
       }
+      console.log(this.name + ':' + sensorDistance);
       return sensorDistance;
     }
   }
@@ -373,6 +379,9 @@
               display: true,
               position: "left",
               id: "y-axis-1",
+              ticks: {
+                max: 1
+              }
             }
           ],
         }
@@ -383,7 +392,7 @@
   function pushToHighScoreChart(epoch, score) {
     highScoreChart.data.labels.push(epoch);
     highScoreChart.data.datasets[0].data.push(score);
-    if(highScoreChart.data.labels.length > 50) {
+    if (highScoreChart.data.labels.length > 50) {
       highScoreChart.data.labels.shift();
       highScoreChart.data.datasets[0].data.shift();
     }
@@ -410,25 +419,22 @@
   latest_loss = 1;
   latest_accuracy = 0;
 
-  function initEnvironment(testRun = false) {
-    var Engine = Matter.Engine,
+  function initEnvironment() {
+    let Engine = Matter.Engine,
       Render = Matter.Render,
       World = Matter.World,
       Bodies = Matter.Bodies,
       Body = Matter.Body,
-      Events = Matter.Events,
       sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 200,
       timer = 0,
-      multiplier = 1,
-      qSpeed = 0,
-      qSpeedMax = 0;
+      multiplier = 1;
 
     // create an engine
-    var engine = Engine.create();
+    let engine = Engine.create();
     engine.world.gravity.y = 0;
 
     // create a renderer
-    var render = Render.create({
+    let render = Render.create({
       element: document.getElementById('environment'),
       engine: engine,
       options: {
@@ -473,49 +479,31 @@
 
     car.frictionAir = 0.1;
 
-    var colliderFM = new Collider(Bodies, Body, car, sensorFM, 0);
-    var sensorFMCollider = colliderFM.getBody();
-    var colliderFL = new Collider(Bodies, Body, car, sensorFM, Math.PI / 4);
-    var sensorFLCollider = colliderFL.getBody();
-    var colliderFR = new Collider(Bodies, Body, car, sensorFM, -Math.PI / 4);
-    var sensorFRCollider = colliderFR.getBody();
-
     // create two boxes and a ground
-    var boxes = [];
+    let boxes = [];
+
     for (i = 0; i < experience / 10; i++) {
-      var box = Bodies.rectangle(800 * Math.random(), 600 * Math.random(), 100 + 100 * Math.random(), 100 + 100 * Math.random(), {isStatic: true});
+      let box = Bodies.rectangle(800 * Math.random(), 600 * Math.random(), 100 + 100 * Math.random(), 100 + 100 * Math.random(), {isStatic: true});
       boxes.push(box);
     }
+    let wallB = Bodies.rectangle(400, 600, 810, 100, {isStatic: true});
 
-    var wallB = Bodies.rectangle(400, 600, 810, 100, {isStatic: true});
-    var wallT = Bodies.rectangle(400, 0, 810, 100, {isStatic: true});
-    var wallL = Bodies.rectangle(0, 305, 100, 810, {isStatic: true});
-    var wallR = Bodies.rectangle(800, 305, 100, 810, {isStatic: true});
+    let wallT = Bodies.rectangle(400, 0, 810, 100, {isStatic: true});
+    let wallL = Bodies.rectangle(0, 305, 100, 810, {isStatic: true});
+    let wallR = Bodies.rectangle(800, 305, 100, 810, {isStatic: true});
     boxes.push(wallB);
     boxes.push(wallT);
     boxes.push(wallL);
     boxes.push(wallR);
 
-    boxes.push(sensorFMCollider);
-    boxes.push(sensorFLCollider);
-    boxes.push(sensorFRCollider);
+    let colliderFM = new Collider(boxes, car, sensorFM, 'sensorFM', 0);
+    let colliderFL = new Collider(boxes, car, sensorFL, 'sensorFL', -Math.PI / 4);
+    let colliderFR = new Collider(boxes, car, sensorFR, 'sensorFR', Math.PI / 4);
+
     boxes.push(car);
 
     // add all of the bodies to the world
     World.add(engine.world, boxes);
-
-    Events.on(engine, 'collisionStart', function (event) {
-      var pairs = event.pairs;
-
-      for (var i = 0, j = pairs.length; i != j; ++i) {
-        var pair = pairs[i];
-
-        sensorDistanceFM = colliderFM.getSensorDistance(pair, 'sensorFM');
-        sensorDistanceFL = colliderFL.getSensorDistance(pair, 'sensorFL');
-        sensorDistanceFR = colliderFR.getSensorDistance(pair, 'sensorFR');
-
-      }
-    });
 
     // run the engine
     Engine.run(engine);
@@ -524,26 +512,19 @@
     Render.run(render);
 
     function reset() {
-      if (qSpeedMax > 0) {
-        qSpeedTop = qSpeedMax;
-        qSpeedMax = 0;
-      }
-
       iteration++;
-      qSpeed = 0;
 
       Matter.Render.stop(render); // this only stop renderer but not destroy canvas
       render.canvas.remove();
       timer = 0;
-      if (testOnNextReset) {
-        testOnNextReset = false;
-        initEnvironment(true);
-      } else {
-        initEnvironment();
-      }
+      initEnvironment();
     }
 
     function addInput() {
+      sensorDistanceFM = colliderFM.getSensorDistance()
+      sensorDistanceFL = colliderFL.getSensorDistance()
+      sensorDistanceFR = colliderFR.getSensorDistance()
+
       let state = [
         sensorDistanceFM,
         sensorDistanceFL,
@@ -553,7 +534,7 @@
       const actions = [
         0, 1, 2, 3,
       ];
-      let reward = Math.max(car.speed, 0) - Math.min(200 - sensorDistanceFM, 0);
+      let reward = (50 * Math.max(car.speed, 0) - Math.min(200 - sensorDistanceFM, 0)) / 200;
 
       let action = actorCritic.getAction(
         state,
@@ -600,9 +581,9 @@
       }, {x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle)});
 
       pushToHighScoreChart(actorCritic.epoch, reward);
-      if (qSpeed < -10) {
-        reset();
-        return;
+      if (actorCritic.epoch > 400) {
+        actorCritic.save();
+        location.reload();
       }
 
       setTimeout(addInput, 50 / multiplier);

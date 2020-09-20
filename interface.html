@@ -113,25 +113,25 @@
     </div>
     <script src="joy.min.js"></script>
     <script>
-      var leftJoystick = new JoyStick("left_joystick");
-      var rightJoystick = new JoyStick("right_joystick");
-      var maxThrottle = 220;
-      var recordingOn = false;
-      var recording = [];
-      var playCursor = 0;
-      var playbackOn = false;
+      let leftJoystick = new JoyStick("left_joystick");
+      let rightJoystick = new JoyStick("right_joystick");
+      let maxThrottle = 220;
+      let recordingOn = false;
+      let recording = [];
+      let playCursor = 0;
+      let playbackOn = false;
       function updateDistance(id, data) {
-        var distance = Math.min(data[id], 200);
-        var newWidth = parseInt(distance / 5);
+        let distance = Math.min(data[id], 200);
+        let newWidth = parseInt(distance / 5);
         document.getElementById(id).style.width = newWidth + "%";
         document.getElementById(id).innerHTML = distance + "cm";
       }
       function getProgress() {
-        var throttle = leftJoystick.GetY();
-        var turn = rightJoystick.GetX();
-        var left = (throttle * maxThrottle) / 100;
+        let throttle = leftJoystick.GetY();
+        let turn = rightJoystick.GetX();
+        let left = (throttle * maxThrottle) / 100;
         left = left + ((maxThrottle - left) * turn) / 100;
-        var right = (throttle * maxThrottle) / 100;
+        let right = (throttle * maxThrottle) / 100;
         right = right - ((maxThrottle - right) * turn) / 100;
         if (recordingOn) {
           recording.push({ left: left, right: right });
@@ -142,10 +142,10 @@
         }
       }
       function performAction(left, right, callback) {
-        var xhttp = new XMLHttpRequest();
+        let xhttp = new XMLHttpRequest();
         xhttp.onreadystatechange = function() {
           if (this.readyState == 4 && this.status == 200) {
-            var response = JSON.parse(this.responseText.trim());
+            let response = JSON.parse(this.responseText.trim());
             console.log(this.responseText);
             updateDistance("distanceFL", response["data"]);
             updateDistance("distanceFR", response["data"]);
