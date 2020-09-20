@@ -597,6 +597,7 @@
           obstacles = Math.max(obstacles, 0);
         } else {
           obstacles += 1;
+          obstacles = Math.min(obstacles, 10);
         }
         localStorage.setItem('obstacles', obstacles);
         location.reload();
