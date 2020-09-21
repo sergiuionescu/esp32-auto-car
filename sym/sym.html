@@ -17,6 +17,10 @@
       <div id="high-score">
       </div>
     </div>
+    <div class="col">
+      <div id="weights">
+      </div>
+    </div>
   </div>
   <div class="row">
     <div class="col">
@@ -135,6 +139,7 @@
       });
 
       let policyFlat = policy.dataSync();
+      pushToWeightsChart(this.epoch, policyFlat);
 
       return chance.weighted(actions, policyFlat);
     }
@@ -281,7 +286,7 @@
         sensorDistance = Math.sqrt(Math.pow(this.sensor.position.x - firstHit.point.x, 2)
           + Math.pow(this.sensor.position.y - firstHit.point.y, 2));
       }
-      console.log(this.name + ':' + sensorDistance);
+      // console.log(this.name + ':' + sensorDistance);
       return sensorDistance;
     }
   }
@@ -404,12 +409,80 @@
 
 </script>
 <script>
+  function createWeightsChart() {
+    var canvasContainer = document.getElementById('weights');
+    var canvas = document.createElement("CANVAS");
+    canvasContainer.style.width = 300;
+    canvasContainer.appendChild(canvas);
+    weightsChart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Forward',
+            fill: false,
+            backgroundColor: "#E74C3C",
+            data: []
+          },
+          {
+            label: 'Right',
+            fill: false,
+            backgroundColor: "#16A085",
+            data: []
+          },
+          {
+            label: 'Left',
+            fill: false,
+            backgroundColor: "#1238c1",
+            data: []
+          },
+          {
+            label: 'Back',
+            fill: false,
+            backgroundColor: "#fcca00",
+            data: []
+          }
+        ]
+      },
+      options: {
+        title: {
+          display: true,
+          text: 'Weights'
+        },
+        scales: {
+          xAxes: [{
+            stacked: true,
+          }],
+          yAxes: [{
+            stacked: true
+          }]
+        }
+      }
+    });
+  }
+
+  function pushToWeightsChart(epoch, weights) {
+    weightsChart.data.labels.push(epoch);
+    weightsChart.data.datasets[0].data.push(weights[0]);
+    weightsChart.data.datasets[1].data.push(weights[1]);
+    weightsChart.data.datasets[2].data.push(weights[2]);
+    weightsChart.data.datasets[3].data.push(weights[3]);
+    if (weightsChart.data.labels.length > 50) {
+      weightsChart.data.labels.shift();
+      weightsChart.data.datasets[0].data.shift();
+      weightsChart.data.datasets[1].data.shift();
+      weightsChart.data.datasets[2].data.shift();
+      weightsChart.data.datasets[3].data.shift();
+    }
+    weightsChart.update();
+  }
+</script>
+<script>
   var iteration = 0,
-    experience = 0,
-    qSpeedTop = 0,
-    testOnNextReset = false,
     evolutionChart,
-    highScoreChart;
+    highScoreChart,
+    weightsChart;
   // create the model
   const model = tf.sequential();
   model.add(tf.layers.dense({units: 10, inputShape: [10], activation: 'relu'}));
@@ -430,6 +503,8 @@
       sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 200,
       timer = 0,
       multiplier = 1;
+
+    createWeightsChart();
 
     // create an engine
     let engine = Engine.create();
@@ -543,7 +618,11 @@
       const actions = [
         0, 1, 2, 3,
       ];
-      let reward = (50 * Math.max(car.speed, 0) - Math.min(200 - sensorDistanceFM, 0)) / 200;
+      let reward = (
+        50 * Math.max(car.speed, 0)
+        - Math.min(200 - sensorDistanceFM, 0)
+        + Math.abs(50 * Math.cos(car.angle))
+      ) / 200;
 
       let action = actorCritic.getAction(
         state,
@@ -597,7 +676,7 @@
           obstacles = Math.max(obstacles, 0);
         } else {
           obstacles += 1;
-          obstacles = Math.min(obstacles, 10);
+          obstacles = Math.min(obstacles, 5);
         }
         localStorage.setItem('obstacles', obstacles);
         location.reload();
