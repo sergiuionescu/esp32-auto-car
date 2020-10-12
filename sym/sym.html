@@ -54,11 +54,12 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script>
   class ActorCritic {
-    constructor(stateSize, actionSize, reset) {
+    constructor(stateSize, actionSize, reset, act) {
       this.render = false;
       this.stateSize = stateSize;
       this.actionSize = actionSize;
       this.valueSize = 1;
+      this.act = act;
 
       this.discountFactor = 0.99;
       this.actorLearningRate = 0.001;
@@ -81,7 +82,7 @@
     buildActor() {
       const model = tf.sequential();
       model.add(tf.layers.dense({
-        units: 24,
+        units: 400,
         activation: 'relu',
         kernelInitializer: 'glorotUniform',
         inputShape: [this.stateSize],
@@ -107,7 +108,7 @@
       const model = tf.sequential();
 
       model.add(tf.layers.dense({
-        units: 24,
+        units: 400,
         activation: 'relu',
         kernelInitializer: 'glorotUniform',
         inputShape: [this.stateSize],
@@ -141,10 +142,15 @@
       let policyFlat = policy.dataSync();
       pushToWeightsChart(this.epoch, policyFlat);
 
-      return chance.weighted(actions, policyFlat);
+      let action = chance.weighted(actions, policyFlat)
+      if (this.act) {
+        action = policyFlat.indexOf(Math.max.apply(0, policyFlat));
+      }
+
+      return action;
     }
 
-    trainModel(state, action, reward, nextState, done) {
+    trainModel(state, action, reward, nextState) {
       let target = [];
       let advantages = new Array(this.actionSize).fill(0);
 
@@ -154,13 +160,8 @@
       let value = this.critic.predict(tfState).dataSync();
       let nextValue = this.critic.predict(tfNextState).dataSync();
 
-      if (done) {
-        advantages[action] = reward - value;
-        target[0] = reward;
-      } else {
-        advantages[action] = reward + this.discountFactor * (nextValue) - value;
-        target[0] = reward + this.discountFactor * nextValue;
-      }
+      advantages[action] = reward + this.discountFactor * (nextValue) - value;
+      target[0] = reward + this.discountFactor * nextValue;
 
       this.actor.fit(tfState, tf.tensor([advantages]), {
         epochs: 1,
@@ -203,7 +204,12 @@
     }
   }
 
-  var actorCritic = new ActorCritic(3, 4, window.location.hash.substr(1) === 'reset');
+  let actorCritic = new ActorCritic(
+    3,
+    4,
+    window.location.hash.substr(1) === 'reset',
+    window.location.hash.substr(1) === 'act'
+  );
   document.getElementById("name").innerHTML = actorCritic.name;
 
 </script>
@@ -623,6 +629,9 @@
         - Math.min(200 - sensorDistanceFM, 0)
         + Math.abs(50 * Math.cos(car.angle))
       ) / 200;
+      if(sensorDistanceFM < 20) {
+        reward = 0;
+      }
 
       let action = actorCritic.getAction(
         state,
