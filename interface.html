@@ -21,7 +21,7 @@
       div.progress {
         position: absolute;
         margin: auto;
-        width: 45%;
+        width: 15%;
         height: 2%;
         background-color: blueviolet;
       }
@@ -73,48 +73,49 @@
     </style>
   </head>
   <body>
-    <div class="container">
-      <div class="sensors">
-        <div class="progress" id="distanceFL" style="left:0;top:0"></div>
-        <div class="progress" id="distanceFR" style="right:0;top:0"></div>
+    <div class='container'>
+      <div class='sensors'>
+        <div class='progress' id='distanceFL' style='left:0;top:0'></div>
+        <div class='progress' id='distanceFM' style='left:42.5%;top:0'></div>
+        <div class='progress' id='distanceFR' style='right:0;top:0'></div>
       </div>
-      <div class="toolbar">
-        <input type="button" id="record" name="record" value="O" />
+      <div class='toolbar'>
+        <input type='button' id='record' name='record' value='O' />
         <input
-          type="button"
-          id="stop"
-          name="stop"
-          value="[]"
-          disabled="disabled"
+          type='button'
+          id='stop'
+          name='stop'
+          value='[]'
+          disabled='disabled'
         />
         <input
-          type="button"
-          id="play"
-          name="play"
-          value=">"
-          disabled="disabled"
+          type='button'
+          id='play'
+          name='play'
+          value='>'
+          disabled='disabled'
         />
-        <div id="counter"></div>
+        <div id='counter'></div>
       </div>
       <div>
-        <div class="left">
+        <div class='left'>
           <div
-            id="left_joystick"
-            style="width:200px;height:200px;margin:50px"
+            id='left_joystick'
+            style='width:200px;height:200px;margin:50px'
           ></div>
         </div>
-        <div class="right">
+        <div class='right'>
           <div
-            id="right_joystick"
-            style="width:200px;height:200px;margin:50px"
+            id='right_joystick'
+            style='width:200px;height:200px;margin:50px'
           ></div>
         </div>
       </div>
     </div>
-    <script src="joy.min.js"></script>
+    <script src='joy.min.js'></script>
     <script>
-      let leftJoystick = new JoyStick("left_joystick");
-      let rightJoystick = new JoyStick("right_joystick");
+      let leftJoystick = new JoyStick('left_joystick');
+      let rightJoystick = new JoyStick('right_joystick');
       let maxThrottle = 220;
       let recordingOn = false;
       let recording = [];
@@ -123,8 +124,8 @@
       function updateDistance(id, data) {
         let distance = Math.min(data[id], 200);
         let newWidth = parseInt(distance / 5);
-        document.getElementById(id).style.width = newWidth + "%";
-        document.getElementById(id).innerHTML = distance + "cm";
+        document.getElementById(id).style.width = newWidth + '%';
+        document.getElementById(id).innerHTML = distance + 'cm';
       }
       function getProgress() {
         let throttle = leftJoystick.GetY();
@@ -135,7 +136,7 @@
         right = right - ((maxThrottle - right) * turn) / 100;
         if (recordingOn) {
           recording.push({ left: left, right: right });
-          document.getElementById("counter").innerHTML = recording.length;
+          document.getElementById('counter').innerHTML = recording.length;
         }
         if (!playbackOn) {
           performAction(left, right, getProgress);
@@ -147,47 +148,48 @@
           if (this.readyState == 4 && this.status == 200) {
             let response = JSON.parse(this.responseText.trim());
             console.log(this.responseText);
-            updateDistance("distanceFL", response["data"]);
-            updateDistance("distanceFR", response["data"]);
+            updateDistance('distanceFL', response['data']);
+            updateDistance('distanceFR', response['data']);
+            updateDistance('distanceFM', response['data']);
             setTimeout(callback, 50);
           }
         };
         xhttp.onerror = function(e) {
           setTimeout(callback, 100);
         };
-        xhttp.open("GET", "/data?right=" + right + "&left=" + left, true);
+        xhttp.open('GET', '/data?right=' + right + '&left=' + left, true);
         xhttp.send();
       }
       getProgress();
       function playback() {
         if (playCursor >= recording.length) {
           playbackOn = false;
-          document.getElementById("record").disabled = "";
-          document.getElementById("stop").disabled = "";
+          document.getElementById('record').disabled = '';
+          document.getElementById('stop').disabled = '';
           getProgress();
           return;
         }
-        document.getElementById("counter").innerHTML = playCursor;
-        left = recording[playCursor]["left"];
-        right = recording[playCursor]["right"];
+        document.getElementById('counter').innerHTML = playCursor;
+        left = recording[playCursor]['left'];
+        right = recording[playCursor]['right'];
         playCursor++;
         performAction(left, right, playback);
       }
-      document.getElementById("record").addEventListener("click", function() {
-        document.getElementById("record").disabled = "disabled";
-        document.getElementById("stop").disabled = "";
+      document.getElementById('record').addEventListener('click', function() {
+        document.getElementById('record').disabled = 'disabled';
+        document.getElementById('stop').disabled = '';
         recordingOn = true;
         recording = [];
       });
-      document.getElementById("stop").addEventListener("click", function() {
-        document.getElementById("stop").disabled = "disabled";
-        document.getElementById("record").disabled = "";
-        document.getElementById("play").disabled = "";
+      document.getElementById('stop').addEventListener('click', function() {
+        document.getElementById('stop').disabled = 'disabled';
+        document.getElementById('record').disabled = '';
+        document.getElementById('play').disabled = '';
         recordingOn = false;
       });
-      document.getElementById("play").addEventListener("click", function() {
-        document.getElementById("record").disabled = "disabled";
-        document.getElementById("stop").disabled = "";
+      document.getElementById('play').addEventListener('click', function() {
+        document.getElementById('record').disabled = 'disabled';
+        document.getElementById('stop').disabled = '';
         playbackOn = true;
         playCursor = 0;
         playback();

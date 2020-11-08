@@ -13,28 +13,28 @@ The projects contains software for assisting a toy car navigation.
 
 #Circuit connection
 
-| ESP32 | TB66112FNG | HC-SRO4 FL | HC-SRO4 FR | HC-SRO4 FM | Motor Left | Motor Right |
+| ESP32 | TB66112FNG | HC-SRO4 FR | HC-SRO4 FL | HC-SRO4 FM | Motor Left | Motor Right |
 |-------|------------|------------|------------|------------|------------|-------------|
 | GND   | GND        |            |            |            |            |             |
 | GND   | GND        |            |            |            |            |             |
 | GND   | GND        |            |            |            |            |             |
 | D18   | AIN1       |            |            |            |            |             |
 | D19   | AIN2       |            |            |            |            |             |
-| D21   | PWMA       |            |            |            |            |             |
-| D33   | STBY       |            |            |            |            |             |
-| D25   | BIN1       |            |            |            |            |             |
-| D26   | BIN2       |            |            |            |            |             |
-| D27   | PWMB       |            |            |            |            |             |
-| D12   |            | Echo       |            |            |            |             |
-| D13   |            | Trig       |            |            |            |             |
+| D23   | PWMA       |            |            |            |            |             |
+| D27   | STBY       |            |            |            |            |             |
+| D26   | BIN1       |            |            |            |            |             |
+| D25   | BIN2       |            |            |            |            |             |
+| D33   | PWMB       |            |            |            |            |             |
+| D5    |            | Echo       |            |            |            |             |
+| D4    |            | Trig       |            |            |            |             |
 | GND   |            | Gnd        |            |            |            |             |
 | VIN   |            | Vcc        |            |            |            |             |
 | D14   |            |            | Echo       |            |            |             |
 | D32   |            |            | Trig       |            |            |             |
 | GND   |            |            | Gnd        |            |            |             |
 | VIN   |            |            | Vcc        |            |            |             |
-| D4    |            |            |            | Echo       |            |             |
-| D5    |            |            |            | Trig       |            |             |
+| D12   |            |            |            | Echo       |            |             |
+| D13   |            |            |            | Trig       |            |             |
 | GND   |            |            |            | Gnd        |            |             |
 | VIN   |            |            |            | Vcc        |            |             |
 |       | A1         |            |            |            | A1         |             |

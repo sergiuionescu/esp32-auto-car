@@ -7,11 +7,16 @@
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #endif
 
-const int trigPinFL = 13;
-const int echoPinFL = 12;
+const int onBoardLed = 2;
 
-const int trigPinFR = 32;
-const int echoPinFR = 14;
+const int echoPinFM = 12;
+const int trigPinFM = 13;
+
+const int echoPinFL = 14;
+const int trigPinFL = 32;
+
+const int echoPinFR = 5;
+const int trigPinFR = 4;
 
 const int maxDistance = 200;
 const int maxPower = 256;
@@ -27,6 +32,7 @@ String wifi_password;
 long duration;
 int distanceFL;
 int distanceFR;
+int distanceFM;
 
 int motorRightReference;
 int motorLeftReference;
@@ -38,10 +44,10 @@ struct Channel {
     int value;
 };
 
-Channel motorRight = { 25 , 26 , 27 , 0 };
-Channel motorLeft = { 18 , 19 , 21 , 0 }; // en1 , en2 , pwm , value
+Channel motorRight = { 26 , 25 , 33 , 0 };
+Channel motorLeft = { 18 , 19 , 23 , 0 }; // en1 , en2 , pwm , value
 
-int standby = 33;
+int standby = 27;
 
 // Setting PWM properties
 const int freq = 20000;
@@ -58,13 +64,19 @@ AsyncWebServer server(80);
 void setup() {
   Serial.begin(115200);
 
+  logToSerial("Starting…");
   connectOrAp();
+
+  pinMode(onBoardLed, OUTPUT);
 
   pinMode(trigPinFL, OUTPUT);
   pinMode(echoPinFL, INPUT);
 
   pinMode(trigPinFR, OUTPUT);
   pinMode(echoPinFR, INPUT);
+
+  pinMode(trigPinFM, OUTPUT);
+  pinMode(echoPinFM, INPUT);
 
   pinMode(motorRight.en1, OUTPUT);
   pinMode(motorRight.en2, OUTPUT);
@@ -91,18 +103,18 @@ void setup() {
   
   server.begin();
 
-  Serial.println("Setup done");
+  logToSerial("Setup done");
 }
 
 void loop() {
-  delay(50);
+  delay(10);
   updateDistance();  
   updatePWM();
 }
 
 
 void handleIndex(AsyncWebServerRequest *request) {
-  request->send(200, "text/html", "<html>  <head>    <style>      body {        font-size: 2em;      }      div.container {        max-width: 800px;        max-height: 600px;        width: 100%;        height: 100%;        top: 0;        bottom: 0;        left: 0;        right: 0;        margin: auto;      }      div.sensors {          margin-top: 40px;      }      div.progress {        position: absolute;        margin: auto;        width: 45%;        height: 2%;        background-color: blueviolet;      }      div.control {        position: absolute;        margin: auto;        width: 80%;        height: 70%;        top: 0;        bottom: 0;        left: 0;        right: 0;      }      div.left {        padding-top: 10%;        width: 50%;        float: left;      }      div.right {        padding-top: 10%;        width: 50%;        float: left;      }      .throttle {        height: 80%;        width: 100px;        padding: 0 15px;        -webkit-appearance: slider-vertical;      }      .vcenter {        position: absolute;        left: 0;        right: 0;        margin: auto;      }      label {        position: absolute;        left: 0;        right: 0;        display: block;        margin-bottom: 10px;      }      div.slider {        width: 100px;      }      input {        font-size: 30px;      }    </style>  </head>  <body>    <div class='container'>        <div class='sensors'>            <div class='progress' id='distanceFL' style='left:0;top:0'></div>            <div class='progress' id='distanceFR' style='right:0;top:0'></div>        </div>        <div class='toolbar'>            <input type='button' id='record' name='record' value='O' />            <input            type='button'            id='stop'            name='stop'            value='[]'            disabled='disabled'            />            <input            type='button'            id='play'            name='play'            value='>'            disabled='disabled'            />            <div id='counter'></div>        </div>        <div>            <div class='left'>            <div                id='left_joystick'                style='width:200px;height:200px;margin:50px'            ></div>            </div>            <div class='right'>            <div                id='right_joystick'                style='width:200px;height:200px;margin:50px'            ></div>            </div>        </div>        </div>    <script src='joy.min.js'></script>    <script>      var leftJoystick = new JoyStick('left_joystick');      var rightJoystick = new JoyStick('right_joystick');      var maxThrottle = 220;      var recordingOn = false;      var recording = [];      var playCursor = 0;      var playbackOn = false;      function updateDistance(id, data) {        var distance = Math.min(data[id], 200);        var newWidth = parseInt(distance / 5);        document.getElementById(id).style.width = newWidth + '%';        document.getElementById(id).innerHTML = distance + 'cm';      }      function getProgress() {        var throttle = leftJoystick.GetY();        var turn = rightJoystick.GetX();        var left = (throttle * maxThrottle) / 100;        left = left + ((maxThrottle - left) * turn) / 100;        var right = (throttle * maxThrottle) / 100;        right = right - ((maxThrottle - right) * turn) / 100;        if (recordingOn) {          recording.push({ left: left, right: right });          document.getElementById('counter').innerHTML = recording.length;        }        if (!playbackOn) {          performAction(left, right, getProgress);        }      }      function performAction(left, right, callback) {        var xhttp = new XMLHttpRequest();        xhttp.onreadystatechange = function() {          if (this.readyState == 4 && this.status == 200) {            var response = JSON.parse(this.responseText.trim());            console.log(this.responseText);            updateDistance('distanceFL', response['data']);            updateDistance('distanceFR', response['data']);            setTimeout(callback, 50);          }        };        xhttp.onerror = function(e) {          setTimeout(callback, 100);        };        xhttp.open('GET', '/data?right=' + right + '&left=' + left, true);        xhttp.send();      }      getProgress();      function playback() {        if (playCursor >= recording.length) {          playbackOn = false;          document.getElementById('record').disabled = '';          document.getElementById('stop').disabled = '';          getProgress();          return;        }        document.getElementById('counter').innerHTML = playCursor;        left = recording[playCursor]['left'];        right = recording[playCursor]['right'];        playCursor++;        performAction(left, right, playback);      }      document.getElementById('record').addEventListener('click', function() {        document.getElementById('record').disabled = 'disabled';        document.getElementById('stop').disabled = '';        recordingOn = true;        recording = [];      });      document.getElementById('stop').addEventListener('click', function() {        document.getElementById('stop').disabled = 'disabled';        document.getElementById('record').disabled = '';        document.getElementById('play').disabled = '';        recordingOn = false;      });      document.getElementById('play').addEventListener('click', function() {        document.getElementById('record').disabled = 'disabled';        document.getElementById('stop').disabled = '';        playbackOn = true;        playCursor = 0;        playback();      });    </script>  </body></html>\n");
+  request->send(200, "text/html", "<html>  <head>    <style>      body {        font-size: 2em;      }      div.container {        max-width: 800px;        max-height: 600px;        width: 100%;        height: 100%;        top: 0;        bottom: 0;        left: 0;        right: 0;        margin: auto;      }      div.sensors {        margin-top: 40px;      }      div.progress {        position: absolute;        margin: auto;        width: 15%;        height: 2%;        background-color: blueviolet;      }      div.control {        position: absolute;        margin: auto;        width: 80%;        height: 70%;        top: 0;        bottom: 0;        left: 0;        right: 0;      }      div.left {        padding-top: 10%;        width: 50%;        float: left;      }      div.right {        padding-top: 10%;        width: 50%;        float: left;      }      .throttle {        height: 80%;        width: 100px;        padding: 0 15px;        -webkit-appearance: slider-vertical;      }      .vcenter {        position: absolute;        left: 0;        right: 0;        margin: auto;      }      label {        position: absolute;        left: 0;        right: 0;        display: block;        margin-bottom: 10px;      }      div.slider {        width: 100px;      }      input {        font-size: 30px;      }    </style>  </head>  <body>    <div class='container'>      <div class='sensors'>        <div class='progress' id='distanceFL' style='left:0;top:0'></div>        <div class='progress' id='distanceFM' style='left:42.5%;top:0'></div>        <div class='progress' id='distanceFR' style='right:0;top:0'></div>      </div>      <div class='toolbar'>        <input type='button' id='record' name='record' value='O' />        <input          type='button'          id='stop'          name='stop'          value='[]'          disabled='disabled'        />        <input          type='button'          id='play'          name='play'          value='>'          disabled='disabled'        />        <div id='counter'></div>      </div>      <div>        <div class='left'>          <div            id='left_joystick'            style='width:200px;height:200px;margin:50px'          ></div>        </div>        <div class='right'>          <div            id='right_joystick'            style='width:200px;height:200px;margin:50px'          ></div>        </div>      </div>    </div>    <script src='joy.min.js'></script>    <script>      let leftJoystick = new JoyStick('left_joystick');      let rightJoystick = new JoyStick('right_joystick');      let maxThrottle = 220;      let recordingOn = false;      let recording = [];      let playCursor = 0;      let playbackOn = false;      function updateDistance(id, data) {        let distance = Math.min(data[id], 200);        let newWidth = parseInt(distance / 5);        document.getElementById(id).style.width = newWidth + '%';        document.getElementById(id).innerHTML = distance + 'cm';      }      function getProgress() {        let throttle = leftJoystick.GetY();        let turn = rightJoystick.GetX();        let left = (throttle * maxThrottle) / 100;        left = left + ((maxThrottle - left) * turn) / 100;        let right = (throttle * maxThrottle) / 100;        right = right - ((maxThrottle - right) * turn) / 100;        if (recordingOn) {          recording.push({ left: left, right: right });          document.getElementById('counter').innerHTML = recording.length;        }        if (!playbackOn) {          performAction(left, right, getProgress);        }      }      function performAction(left, right, callback) {        let xhttp = new XMLHttpRequest();        xhttp.onreadystatechange = function() {          if (this.readyState == 4 && this.status == 200) {            let response = JSON.parse(this.responseText.trim());            console.log(this.responseText);            updateDistance('distanceFL', response['data']);            updateDistance('distanceFR', response['data']);            updateDistance('distanceFM', response['data']);            setTimeout(callback, 50);          }        };        xhttp.onerror = function(e) {          setTimeout(callback, 100);        };        xhttp.open('GET', '/data?right=' + right + '&left=' + left, true);        xhttp.send();      }      getProgress();      function playback() {        if (playCursor >= recording.length) {          playbackOn = false;          document.getElementById('record').disabled = '';          document.getElementById('stop').disabled = '';          getProgress();          return;        }        document.getElementById('counter').innerHTML = playCursor;        left = recording[playCursor]['left'];        right = recording[playCursor]['right'];        playCursor++;        performAction(left, right, playback);      }      document.getElementById('record').addEventListener('click', function() {        document.getElementById('record').disabled = 'disabled';        document.getElementById('stop').disabled = '';        recordingOn = true;        recording = [];      });      document.getElementById('stop').addEventListener('click', function() {        document.getElementById('stop').disabled = 'disabled';        document.getElementById('record').disabled = '';        document.getElementById('play').disabled = '';        recordingOn = false;      });      document.getElementById('play').addEventListener('click', function() {        document.getElementById('record').disabled = 'disabled';        document.getElementById('stop').disabled = '';        playbackOn = true;        playCursor = 0;        playback();      });    </script>  </body></html>\n");
 }
 
 void handleJoystick(AsyncWebServerRequest *request) {
@@ -126,7 +138,7 @@ void handleData(AsyncWebServerRequest *request) {
       motorLeftReference = param->value().toInt();
     }
   } 
-  Serial.println(message);
+  logToSerial(message);
 
   AsyncResponseStream *response = request->beginResponseStream("application/json");
   
@@ -142,6 +154,7 @@ void handleData(AsyncWebServerRequest *request) {
   data_motors_right["value"] = motorRight.value;
   data["distanceFL"] = distanceFL;
   data["distanceFR"] = distanceFR;
+  data["distanceFM"] = distanceFM;
   data["distanceBL"] = 0;
   data["distanceBR"] = 0;
 
@@ -153,6 +166,7 @@ void handleData(AsyncWebServerRequest *request) {
 
 
 void updateDistance() {
+  logToSerial("Sensor FL");
   digitalWrite(trigPinFL, LOW);
   delayMicroseconds(4);
   digitalWrite(trigPinFL, HIGH);
@@ -161,7 +175,7 @@ void updateDistance() {
   duration = pulseIn(echoPinFL, HIGH);
   distanceFL = duration*0.034/2;
 
-
+  logToSerial("Sensor FR");
   digitalWrite(trigPinFR, LOW);
   delayMicroseconds(4);
   digitalWrite(trigPinFR, HIGH);
@@ -169,31 +183,47 @@ void updateDistance() {
   digitalWrite(trigPinFR, LOW);
   duration = pulseIn(echoPinFR, HIGH);
   distanceFR = duration*0.034/2;
+
+  logToSerial("Sensor FM");
+  digitalWrite(trigPinFM, LOW);
+  delayMicroseconds(4);
+  digitalWrite(trigPinFM, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinFM, LOW);
+  duration = pulseIn(echoPinFM, HIGH);
+  distanceFM = duration*0.034/2;
+  logToSerial("Sensors Done");
 }
 
 void updatePWM(){
     motorRight.value = motorRightReference;
     motorLeft.value = motorLeftReference;
+    bool distanceThreshold = false;
     bool avoidAtAllCost = false;
-    if(motorRight.value > 0 && motorLeft.value > 0) {
-      if(distanceFL <= 50) {
-        avoidAtAllCost = true;
-      }
-      if(distanceFL <= 50) {
-        avoidAtAllCost = true;
-      }
 
-      if(avoidAtAllCost) {
-        if(distanceFL < distanceFR) {
-          motorRight.value = -200;
-          motorLeft.value = 200;
-        } else {
-          motorRight.value = 200;
-          motorLeft.value = -200;
-        }
+    if(distanceFL <= 30 || distanceFM <= 30 || distanceFR <= 30) {
+      distanceThreshold = true;
+    }
+    
+    if(motorRight.value > 0 && motorLeft.value > 0 && distanceThreshold) {
+      avoidAtAllCost = true;
+    }
+
+    if(distanceThreshold) {
+      digitalWrite(onBoardLed,HIGH);
+    } else {
+      digitalWrite(onBoardLed,LOW);
+    }
+
+   if(avoidAtAllCost) {
+      if(distanceFL < distanceFR) {
+        motorRight.value = -200;
+        motorLeft.value = 200;
+      } else {
+        motorRight.value = 200;
+        motorLeft.value = -200;
       }
-    } 
-    if(!avoidAtAllCost) {
+    } else {
       if(motorRight.value > 0) {
         if(distanceFL > 50 && distanceFL < 100) {
           motorRight.value = max(motorRight.value - (maxDistance - distanceFL) * distanceToPowerMultiplier, minPower);
@@ -266,7 +296,7 @@ void handleConnect(AsyncWebServerRequest *request) {
     }
   }
 
-  Serial.println(wifi_ssid.c_str());
+  logToSerial(wifi_ssid.c_str());
 
   WiFi.disconnect();
   delay(100);
@@ -274,11 +304,11 @@ void handleConnect(AsyncWebServerRequest *request) {
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.println("Connecting to WiFi..");
+    logToSerial("Connecting to WiFi..");
   }
  
-  Serial.println("Connected to the WiFi network");
-  Serial.println(WiFi.localIP());
+  logToSerial("Connected to the WiFi network");
+  logToSerial(WiFi.localIP().toString());
 }
 
 void connectOrAp() {
@@ -289,7 +319,7 @@ void connectOrAp() {
       break;
     }
     delay(500);
-    Serial.println("Connecting to previous WiFi..");
+    logToSerial("Connecting to previous WiFi..");
   }
 
   if(WiFi.status() != WL_CONNECTED) {
@@ -297,15 +327,21 @@ void connectOrAp() {
     WiFi.disconnect();
     delay(100);
     
-    Serial.println("Setting AP (Access Point)…");
+    logToSerial("Setting AP (Access Point)…");
   
     WiFi.softAP(ssid, password);
-    Serial.println("Wait 100 ms for AP_START...");
+    logToSerial("Wait 100 ms for AP_START...");
     delay(100);
     WiFi.softAPConfig(local_ip, gateway, subnet);
     delay(100);
   } else {
-    Serial.println(WiFi.localIP());
-    Serial.println(WiFi.gatewayIP().toString());
+    logToSerial(WiFi.localIP().toString());
+    logToSerial(WiFi.gatewayIP().toString());
   }
 }
+
+void logToSerial(const String message) {
+  Serial.printf("%lld::", esp_timer_get_time());
+  Serial.println(message);
+}
+  
