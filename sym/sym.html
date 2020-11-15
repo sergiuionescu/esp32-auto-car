@@ -161,7 +161,7 @@
       let nextValue = this.critic.predict(tfNextState).dataSync();
 
       advantages[action] = reward + this.discountFactor * (nextValue) - value;
-      target[0] = reward + this.discountFactor * nextValue;
+      target = reward + this.discountFactor * nextValue;
 
       this.actor.fit(tfState, tf.tensor([advantages]), {
         epochs: 1,
@@ -170,7 +170,7 @@
         }
       );
 
-      this.critic.fit(tfState, tf.tensor(target), {
+      this.critic.fit(tfState, tf.tensor([target]), {
         epochs: 1,
       }).then(info => {
           this.latestCriticLoss = info.history.loss[0];
@@ -181,9 +181,9 @@
       this.epoch++;
     }
 
-    save() {
-      this.actor.save('localstorage://actor');
-      this.critic.save('localstorage://critic');
+    async save() {
+      await this.actor.save('localstorage://actor');
+      await this.critic.save('localstorage://critic');
       localStorage.setItem('name', this.name);
     }
 
@@ -624,6 +624,7 @@
       const actions = [
         0, 1, 2, 3,
       ];
+
       let reward = (
         50 * Math.max(car.speed, 0)
         - Math.min(200 - sensorDistanceFM, 0)
@@ -660,7 +661,7 @@
           leftSpeed = -200;
           rightSpeed = 200;
           break;
-        case 4:
+        case 3:
           leftSpeed = -200;
           rightSpeed = -200;
       }
@@ -679,16 +680,18 @@
 
       pushToHighScoreChart(actorCritic.epoch, reward);
       if (actorCritic.epoch > 400) {
-        actorCritic.save();
-        if(collisions > 0) {
-          obstacles--;
-          obstacles = Math.max(obstacles, 0);
-        } else {
-          obstacles += 1;
-          obstacles = Math.min(obstacles, 5);
-        }
-        localStorage.setItem('obstacles', obstacles);
-        location.reload();
+        actorCritic.save().then(function () {
+          if (collisions > 0) {
+            obstacles--;
+            obstacles = Math.max(obstacles, 0);
+          } else {
+            obstacles += 1;
+            obstacles = Math.min(obstacles, 5);
+          }
+          localStorage.setItem('obstacles', obstacles);
+          location.reload();
+        });
+
       }
 
       setTimeout(addInput, 50 / multiplier);

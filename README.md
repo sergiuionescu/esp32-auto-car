@@ -13,8 +13,10 @@ The projects contains software for assisting a toy car navigation.
 
 #Circuit connection
 
-| ESP32 | TB66112FNG | HC-SRO4 FR | HC-SRO4 FL | HC-SRO4 FM | Motor Left | Motor Right |
+| ESP32 | TB6612FNG | HC-SRO4 FR | HC-SRO4 FL | HC-SRO4 FM | Motor Left | Motor Right |
 |-------|------------|------------|------------|------------|------------|-------------|
+|       | VM(9V)     |            |            |            |            |             |
+| VCC   | VCC        |            |            |            |            |             |
 | GND   | GND        |            |            |            |            |             |
 | GND   | GND        |            |            |            |            |             |
 | GND   | GND        |            |            |            |            |             |

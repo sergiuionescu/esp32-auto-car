@@ -60,6 +60,7 @@ IPAddress gateway(192,168,1,1);
 IPAddress subnet(255,255,255,0);
 
 AsyncWebServer server(80);
+AsyncWebSocket ws("/ws");
 
 void setup() {
   Serial.begin(115200);
@@ -90,58 +91,50 @@ void setup() {
 
   ledcSetup(pwmChannelLeft, freq, resolution);
   ledcSetup(pwmChannelRight, freq, resolution);
-  ledcAttachPin(motorRight.pwm, pwmChannelLeft);
-  ledcAttachPin(motorLeft.pwm, pwmChannelRight);
+  ledcAttachPin(motorRight.pwm, pwmChannelRight);
+  ledcAttachPin(motorLeft.pwm, pwmChannelLeft);
   
   server.on("/", HTTP_GET, handleIndex);
-  server.on("/data", handleData);
   server.on("/joy.min.js", handleJoystick);
 
   server.on("/login", handleLogin);
   server.on("/scan", handleScan);
   server.on("/connect", handleConnect);
+
+  ws.onEvent(onEvent);
+  server.addHandler(&ws);
   
   server.begin();
 
   logToSerial("Setup done");
+  
+  digitalWrite(onBoardLed,HIGH);
+  delay(500);
+  digitalWrite(onBoardLed,LOW);
+  delay(500);
+  digitalWrite(onBoardLed,HIGH);
+  delay(500);
+  digitalWrite(onBoardLed,LOW);
 }
 
 void loop() {
   delay(10);
   updateDistance();  
   updatePWM();
+  sendToWs();
 }
 
 
 void handleIndex(AsyncWebServerRequest *request) {
-  request->send(200, "text/html", "<html>  <head>    <style>      body {        font-size: 2em;      }      div.container {        max-width: 800px;        max-height: 600px;        width: 100%;        height: 100%;        top: 0;        bottom: 0;        left: 0;        right: 0;        margin: auto;      }      div.sensors {        margin-top: 40px;      }      div.progress {        position: absolute;        margin: auto;        width: 15%;        height: 2%;        background-color: blueviolet;      }      div.control {        position: absolute;        margin: auto;        width: 80%;        height: 70%;        top: 0;        bottom: 0;        left: 0;        right: 0;      }      div.left {        padding-top: 10%;        width: 50%;        float: left;      }      div.right {        padding-top: 10%;        width: 50%;        float: left;      }      .throttle {        height: 80%;        width: 100px;        padding: 0 15px;        -webkit-appearance: slider-vertical;      }      .vcenter {        position: absolute;        left: 0;        right: 0;        margin: auto;      }      label {        position: absolute;        left: 0;        right: 0;        display: block;        margin-bottom: 10px;      }      div.slider {        width: 100px;      }      input {        font-size: 30px;      }    </style>  </head>  <body>    <div class='container'>      <div class='sensors'>        <div class='progress' id='distanceFL' style='left:0;top:0'></div>        <div class='progress' id='distanceFM' style='left:42.5%;top:0'></div>        <div class='progress' id='distanceFR' style='right:0;top:0'></div>      </div>      <div class='toolbar'>        <input type='button' id='record' name='record' value='O' />        <input          type='button'          id='stop'          name='stop'          value='[]'          disabled='disabled'        />        <input          type='button'          id='play'          name='play'          value='>'          disabled='disabled'        />        <div id='counter'></div>      </div>      <div>        <div class='left'>          <div            id='left_joystick'            style='width:200px;height:200px;margin:50px'          ></div>        </div>        <div class='right'>          <div            id='right_joystick'            style='width:200px;height:200px;margin:50px'          ></div>        </div>      </div>    </div>    <script src='joy.min.js'></script>    <script>      let leftJoystick = new JoyStick('left_joystick');      let rightJoystick = new JoyStick('right_joystick');      let maxThrottle = 220;      let recordingOn = false;      let recording = [];      let playCursor = 0;      let playbackOn = false;      function updateDistance(id, data) {        let distance = Math.min(data[id], 200);        let newWidth = parseInt(distance / 5);        document.getElementById(id).style.width = newWidth + '%';        document.getElementById(id).innerHTML = distance + 'cm';      }      function getProgress() {        let throttle = leftJoystick.GetY();        let turn = rightJoystick.GetX();        let left = (throttle * maxThrottle) / 100;        left = left + ((maxThrottle - left) * turn) / 100;        let right = (throttle * maxThrottle) / 100;        right = right - ((maxThrottle - right) * turn) / 100;        if (recordingOn) {          recording.push({ left: left, right: right });          document.getElementById('counter').innerHTML = recording.length;        }        if (!playbackOn) {          performAction(left, right, getProgress);        }      }      function performAction(left, right, callback) {        let xhttp = new XMLHttpRequest();        xhttp.onreadystatechange = function() {          if (this.readyState == 4 && this.status == 200) {            let response = JSON.parse(this.responseText.trim());            console.log(this.responseText);            updateDistance('distanceFL', response['data']);            updateDistance('distanceFR', response['data']);            updateDistance('distanceFM', response['data']);            setTimeout(callback, 50);          }        };        xhttp.onerror = function(e) {          setTimeout(callback, 100);        };        xhttp.open('GET', '/data?right=' + right + '&left=' + left, true);        xhttp.send();      }      getProgress();      function playback() {        if (playCursor >= recording.length) {          playbackOn = false;          document.getElementById('record').disabled = '';          document.getElementById('stop').disabled = '';          getProgress();          return;        }        document.getElementById('counter').innerHTML = playCursor;        left = recording[playCursor]['left'];        right = recording[playCursor]['right'];        playCursor++;        performAction(left, right, playback);      }      document.getElementById('record').addEventListener('click', function() {        document.getElementById('record').disabled = 'disabled';        document.getElementById('stop').disabled = '';        recordingOn = true;        recording = [];      });      document.getElementById('stop').addEventListener('click', function() {        document.getElementById('stop').disabled = 'disabled';        document.getElementById('record').disabled = '';        document.getElementById('play').disabled = '';        recordingOn = false;      });      document.getElementById('play').addEventListener('click', function() {        document.getElementById('record').disabled = 'disabled';        document.getElementById('stop').disabled = '';        playbackOn = true;        playCursor = 0;        playback();      });    </script>  </body></html>\n");
+  request->send(200, "text/html", "<html>  <head>    <meta name='viewport' content='initial-scale=1, maximum-scale=1'>    <style>      html, body {        overflow-x: hidden;      }      body {          position: relative;          font-size: 2em;      }      div.container {        max-width: 800px;        max-height: 600px;        width: 100%;        top: 0;        bottom: 0;        left: 0;        right: 0;        margin: auto;      }      div.sensors {        margin-top: 40px;      }      div.progress {        position: absolute;        margin: auto;        width: 15%;        height: 2%;        background-color: blueviolet;      }      div.control {        position: absolute;        margin: auto;        width: 80%;        height: 70%;        top: 0;        bottom: 0;        left: 0;        right: 0;      }      div.left {        width: 50%;        float: left;      }      div.right {        width: 50%;        float: left;      }      label {        position: absolute;        left: 0;        right: 0;        display: block;        margin-bottom: 10px;      }      input {        font-size: 30px;      }      .btn {        background-color: #0363c4;        border: none;        color: white;        padding: 12px 16px;        font-size: 16px;        cursor: pointer;      }      .btn:disabled {        background-color: #9a9b9b;      }      .right {          float:right;      }    </style>    <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>  </head>  <body>    <div class='container'>      <div class='sensors'>        <div class='progress' id='distanceFL' style='left:0;top:0'></div>        <div class='progress' id='distanceFM' style='left:42.5%;top:0'></div>        <div class='progress' id='distanceFR' style='right:0;top:0'></div>      </div>      <div class='toolbar'>        <button class='btn' id='record' name='record'><i class='fa fa-circle'></i></button>        <button class='btn' id='stop' name='stop' disabled='disabled'><i class='fa fa-stop'></i></button>        <button class='btn' id='play' name='play' disabled='disabled'><i class='fa fa-play'></i></button>        <button class='btn right' id='settings' name='settings'><i class='fa fa-cogs'></i></button>        <div id='counter'></div>      </div>      <div>        <div class='left'>          <div            id='left_joystick'            style='width:200px;height:200px;margin-right:50px;margin-left:50px'          ></div>        </div>        <div class='right'>          <div            id='right_joystick'            style='width:200px;height:200px;margin-right:50px;margin-left:50px'          ></div>        </div>      </div>    </div>    <script src='joy.min.js'></script>    <script>      let leftJoystick = new JoyStick('left_joystick');      let rightJoystick = new JoyStick('right_joystick');      let maxThrottle = 220;      let recordingOn = false;      let recording = [];      let playCursor = 0;      let playbackOn = false;      let socket = null;      let hostname = location.hostname;      let uri = 'ws://' + hostname + '/ws';      if(hostname === 'localhost') {        uri = 'ws://' + hostname + ':8000';      }      function initWebsocket() {        socket = new WebSocket(uri);        socket.onopen = function () {          if (socket.readyState === socket.OPEN) {            socket.onmessage = function (message) {              message = JSON.parse(message.data);              updateDistance('distanceFL', message['data']);              updateDistance('distanceFR', message['data']);              updateDistance('distanceFM', message['data']);            };          }        };        socket.onclose = function () {          console.log('Reconnecting to websocket...');          initWebsocket();        };      }      initWebsocket();      function updateDistance(id, data) {        let distance = Math.min(data[id], 200);        let newWidth = parseInt(distance / 5);        document.getElementById(id).style.width = newWidth + '%';        document.getElementById(id).innerHTML = distance + 'cm';      }      function getProgress() {        let throttle = leftJoystick.GetY();        let turn = rightJoystick.GetX();        let left = (throttle * maxThrottle) / 100;        left = left + ((maxThrottle - left) * turn) / 100;        let right = (throttle * maxThrottle) / 100;        right = right - ((maxThrottle - right) * turn) / 100;        if (recordingOn) {          recording.push({ left: left, right: right });          document.getElementById('counter').innerHTML = recording.length;        }        if (!playbackOn) {          performAction(left, right, getProgress);        }      }      function performAction(left, right, callback) {        if(socket.readyState === socket.OPEN){          socket.send(JSON.stringify({'right': right, 'left': left}));        } else {          console.log('Waiting for socket...');        }        setTimeout(callback, 50);      }      getProgress();      function playback() {        if (playCursor >= recording.length) {          playbackOn = false;          document.getElementById('record').disabled = '';          document.getElementById('stop').disabled = '';          getProgress();          return;        }        document.getElementById('counter').innerHTML = playCursor;        left = recording[playCursor]['left'];        right = recording[playCursor]['right'];        playCursor++;        performAction(left, right, playback);      }      document.getElementById('record').addEventListener('click', function() {        document.getElementById('record').disabled = 'disabled';        document.getElementById('stop').disabled = '';        recordingOn = true;        recording = [];      });      document.getElementById('stop').addEventListener('click', function() {        document.getElementById('stop').disabled = 'disabled';        document.getElementById('record').disabled = '';        document.getElementById('play').disabled = '';        recordingOn = false;      });      document.getElementById('play').addEventListener('click', function() {        document.getElementById('record').disabled = 'disabled';        document.getElementById('stop').disabled = '';        playbackOn = true;        playCursor = 0;        playback();      });    </script>  </body></html>\n");
 }
 
 void handleJoystick(AsyncWebServerRequest *request) {
   request->send(200, "text/html", "var JoyStick=function(t,e){var i=void 0===(e=e||{}).title?'joystick':e.title,n=void 0===e.width?0:e.width,o=void 0===e.height?0:e.height,r=void 0===e.internalFillColor?'#00AA00':e.internalFillColor,h=void 0===e.internalLineWidth?2:e.internalLineWidth,d=void 0===e.internalStrokeColor?'#003300':e.internalStrokeColor,a=void 0===e.externalLineWidth?2:e.externalLineWidth,l=void 0===e.externalStrokeColor?'#008000':e.externalStrokeColor,c=void 0===e.autoReturnToCenter||e.autoReturnToCenter,u=document.getElementById(t),s=document.createElement('canvas');s.id=i,0===n&&(n=u.clientWidth),0===o&&(o=u.clientHeight),s.width=n,s.height=o,u.appendChild(s);var f=s.getContext('2d'),g=0,v=2*Math.PI,w=(s.width-(s.width/2+10))/2,C=w+5,m=w+30,p=s.width/2,L=s.height/2,E=s.width/10,S=-1*E,k=s.height/10,W=-1*k,G=p,x=L;function R(){f.beginPath(),f.arc(p,L,m,0,v,!1),f.lineWidth=a,f.strokeStyle=l,f.stroke()}function T(){f.beginPath(),G<w&&(G=C),G+w>s.width&&(G=s.width-C),x<w&&(x=C),x+w>s.height&&(x=s.height-C),f.arc(G,x,w,0,v,!1);var t=f.createRadialGradient(p,L,5,p,L,200);t.addColorStop(0,r),t.addColorStop(1,d),f.fillStyle=t,f.fill(),f.lineWidth=h,f.strokeStyle=d,f.stroke()}'ontouchstart'in document.documentElement?(s.addEventListener('touchstart',function(t){g=1},!1),s.addEventListener('touchmove',function(t){t.preventDefault(),1===g&&t.targetTouches[0].target===s&&(G=t.targetTouches[0].pageX,x=t.targetTouches[0].pageY,G-=s.offsetLeft,x-=s.offsetTop,f.clearRect(0,0,s.width,s.height),R(),T())},!1),s.addEventListener('touchend',function(t){g=0,c&&(G=p,x=L);f.clearRect(0,0,s.width,s.height),R(),T()},!1)):(s.addEventListener('mousedown',function(t){g=1},!1),s.addEventListener('mousemove',function(t){1===g&&(G=t.pageX,x=t.pageY,G-=s.offsetLeft,x-=s.offsetTop,f.clearRect(0,0,s.width,s.height),R(),T())},!1),s.addEventListener('mouseup',function(t){g=0,c&&(G=p,x=L);f.clearRect(0,0,s.width,s.height),R(),T()},!1)),R(),T(),this.GetWidth=function(){return s.width},this.GetHeight=function(){return s.height},this.GetPosX=function(){return G},this.GetPosY=function(){return x},this.GetX=function(){return((G-p)/C*100).toFixed()},this.GetY=function(){return((x-L)/C*100*-1).toFixed()},this.GetDir=function(){var t='',e=G-p,i=x-L;return i>=W&&i<=k&&(t='C'),i<W&&(t='N'),i>k&&(t='S'),e<S&&('C'===t?t='W':t+='W'),e>E&&('C'===t?t='E':t+='E'),t}};\n");
 }
 
-void handleData(AsyncWebServerRequest *request) {
+void sendToWs() {
   String message;
-  String responseText;
-  int count = request->params();
-  for (int i = 0; i < count; i++) {
-    AsyncWebParameter* param = request->getParam(i);
-    message += "Param n" + (String)i + " –> ";
-    message += param->name() + ": ";
-    message += param->value() + "\n";
-
-    if(param->name() == "right") {
-      motorRightReference = param->value().toInt();
-    }
-    if(param->name() == "left") {
-      motorLeftReference = param->value().toInt();
-    }
-  } 
-  logToSerial(message);
-
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
-  
   const size_t capacity = 3*JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(5);
   DynamicJsonDocument doc(capacity);
 
@@ -158,15 +151,14 @@ void handleData(AsyncWebServerRequest *request) {
   data["distanceBL"] = 0;
   data["distanceBR"] = 0;
 
-  serializeJson(doc, responseText);
-  response->print(responseText);
-  
-  request->send(response);
+  serializeJson(doc, message);
+
+  ws.textAll(message);
 }
 
 
 void updateDistance() {
-  logToSerial("Sensor FL");
+//  logToSerial("Sensor FL");
   digitalWrite(trigPinFL, LOW);
   delayMicroseconds(4);
   digitalWrite(trigPinFL, HIGH);
@@ -175,7 +167,7 @@ void updateDistance() {
   duration = pulseIn(echoPinFL, HIGH);
   distanceFL = duration*0.034/2;
 
-  logToSerial("Sensor FR");
+//  logToSerial("Sensor FR");
   digitalWrite(trigPinFR, LOW);
   delayMicroseconds(4);
   digitalWrite(trigPinFR, HIGH);
@@ -184,7 +176,7 @@ void updateDistance() {
   duration = pulseIn(echoPinFR, HIGH);
   distanceFR = duration*0.034/2;
 
-  logToSerial("Sensor FM");
+//  logToSerial("Sensor FM");
   digitalWrite(trigPinFM, LOW);
   delayMicroseconds(4);
   digitalWrite(trigPinFM, HIGH);
@@ -192,7 +184,7 @@ void updateDistance() {
   digitalWrite(trigPinFM, LOW);
   duration = pulseIn(echoPinFM, HIGH);
   distanceFM = duration*0.034/2;
-  logToSerial("Sensors Done");
+//  logToSerial("Sensors Done");
 }
 
 void updatePWM(){
@@ -217,25 +209,13 @@ void updatePWM(){
 
    if(avoidAtAllCost) {
       if(distanceFL < distanceFR) {
-        motorRight.value = -200;
-        motorLeft.value = 200;
+        motorRight.value = -220;
+        motorLeft.value = 220;
       } else {
-        motorRight.value = 200;
-        motorLeft.value = -200;
+        motorRight.value = 220;
+        motorLeft.value = -220;
       }
-    } else {
-      if(motorRight.value > 0) {
-        if(distanceFL > 50 && distanceFL < 100) {
-          motorRight.value = max(motorRight.value - (maxDistance - distanceFL) * distanceToPowerMultiplier, minPower);
-        }
-      }
-      if(motorLeft.value > 0) {
-        if(distanceFR > 50 && distanceFR < 100) {
-          motorLeft.value = max(motorLeft.value - (maxDistance - distanceFR) * distanceToPowerMultiplier, minPower);
-        }
-      }
-    }
-    
+    } 
     
     //Channel 1
     if(motorRight.value < 0){
@@ -245,7 +225,7 @@ void updatePWM(){
         digitalWrite(motorRight.en1, HIGH);
         digitalWrite(motorRight.en2, LOW);  
     }
-    ledcWrite(pwmChannelLeft, abs(motorRight.value));
+    ledcWrite(pwmChannelRight, abs(motorRight.value));
 
     //Channel 2
     if(motorLeft.value < 0){
@@ -255,7 +235,7 @@ void updatePWM(){
         digitalWrite(motorLeft.en1, HIGH);
         digitalWrite(motorLeft.en2, LOW); 
     }
-    ledcWrite(pwmChannelRight, abs(motorLeft.value));
+    ledcWrite(pwmChannelLeft, abs(motorLeft.value));
 }
 
 void handleLogin(AsyncWebServerRequest *request) {
@@ -337,6 +317,35 @@ void connectOrAp() {
   } else {
     logToSerial(WiFi.localIP().toString());
     logToSerial(WiFi.gatewayIP().toString());
+  }
+}
+
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  switch (type) {
+    case WS_EVT_CONNECT:
+      Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+      break;
+    case WS_EVT_DISCONNECT:
+      Serial.printf("WebSocket client #%u disconnected\n", client->id());
+      break;
+    case WS_EVT_DATA:
+      handleWebSocketMessage(arg, data, len);
+      break;
+    case WS_EVT_PONG:
+    case WS_EVT_ERROR:
+      break;
+  }
+}
+
+void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
+  AwsFrameInfo *info = (AwsFrameInfo*)arg;
+  if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+    data[len] = 0;
+    StaticJsonDocument<200> doc;
+    deserializeJson(doc, (char*)data);     
+   
+    motorRightReference = (int)doc["right"]; 
+    motorLeftReference = (int)doc["left"];   
   }
 }
 
