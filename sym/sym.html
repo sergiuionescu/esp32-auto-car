@@ -1,18 +1,38 @@
 <html>
 
 <head>
+  <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
         integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+  <style>
+      .btn {
+          background-color: #0363c4;
+          border: none;
+          color: white;
+          padding: 12px 16px;
+          font-size: 16px;
+          cursor: pointer;
+      }
+
+      .btn:disabled {
+          background-color: #9a9b9b;
+      }
+  </style>
 </head>
 
 <body>
 <div class="container">
   <div class="row">
-    <div class="col">
-      <div id="name"></div>
-      <div id="canvas-container">
-      </div>
+    <div class="col-sm">
+      <button class='btn disabled' id='model_name' name='model_name'><i class='fa fa-info'> Model: <i id="name"></i></i>
+      </button>
+      <button class='btn' id='download' name='download'><i class='fa fa-download'> Download</i></button>
     </div>
+    <div class="col-sm">
+      <button class='btn float-right' id='reset' name='reset'><i class='fa fa-power-off'> Reset</i></button>
+    </div>
+  </div>
+  <div class="row">
     <div class="col">
       <div id="high-score">
       </div>
@@ -23,8 +43,12 @@
     </div>
   </div>
   <div class="row">
-    <div class="col">
+    <div class="col-sm">
       <div id="environment"></div>
+    </div>
+    <div class="col-sm">
+      <div id="canvas-container">
+      </div>
     </div>
   </div>
   <div class="row">
@@ -53,6 +77,14 @@
     src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script>
+  let historyData = localStorage.getItem('historyData')
+  && window.location.hash.substr(1) !== 'reset' ? JSON.parse(localStorage.getItem('historyData')) : {
+    'averageActorLoss': [],
+    'averageCriticLoss': []
+  };
+  let reward = 0;
+</script>
+<script>
   class ActorCritic {
     constructor(stateSize, actionSize, reset, act) {
       this.render = false;
@@ -77,6 +109,9 @@
       this.epoch = 0;
       this.latestActorLoss = 0;
       this.latestCriticLoss = 0;
+
+      this.actorLosses = [];
+      this.criticLosses = [];
     }
 
     buildActor() {
@@ -151,22 +186,25 @@
     }
 
     trainModel(state, action, reward, nextState) {
-      let target = [];
       let advantages = new Array(this.actionSize).fill(0);
 
-      let tfState = tf.tensor2d(normalizer.normalizeFeatures(state), [1, state.length]);
-      let tfNextState = tf.tensor2d(normalizer.normalizeFeatures(nextState), [1, nextState.length]);
+      let normalizedState = normalizer.normalizeFeatures(state);
+      let tfState = tf.tensor2d(normalizedState, [1, state.length]);
+      let normalizedNextState = normalizer.normalizeFeatures(nextState);
+      let tfNextState = tf.tensor2d(normalizedNextState, [1, nextState.length]);
 
-      let value = this.critic.predict(tfState).dataSync();
-      let nextValue = this.critic.predict(tfNextState).dataSync();
+      let predictedCurrentStateValue = this.critic.predict(tfState).dataSync();
+      let predictedNextStateValue = this.critic.predict(tfNextState).dataSync();
 
-      advantages[action] = reward + this.discountFactor * (nextValue) - value;
-      target = reward + this.discountFactor * nextValue;
+      let target = reward + this.discountFactor * predictedNextStateValue;
+      advantages[action] = target - predictedCurrentStateValue;
+      // console.log(normalizedState, normalizedNextState, action, target, advantages);
 
       this.actor.fit(tfState, tf.tensor([advantages]), {
         epochs: 1,
       }).then(info => {
           this.latestActorLoss = info.history.loss[0];
+          this.actorLosses.push(this.latestActorLoss);
         }
       );
 
@@ -174,6 +212,7 @@
         epochs: 1,
       }).then(info => {
           this.latestCriticLoss = info.history.loss[0];
+          this.criticLosses.push(this.latestCriticLoss);
         }
       );
 
@@ -201,6 +240,22 @@
 
         this.name = name;
       }
+    }
+
+    getAverageActorLoss() {
+      return this.getAverage(this.actorLosses);
+    }
+
+    getAverageCriticLoss() {
+      return this.getAverage(this.criticLosses);
+    }
+
+    getAverage(list) {
+      let sum = 0;
+      for (let i = 0; i < list.length; i++) {
+        sum += list[i];
+      }
+      return sum / list.length;
     }
   }
 
@@ -332,7 +387,7 @@
         scales: {
           yAxes: [
             {
-              type: "linear", // only linear but allow scale type registration. This allows extensions to exist solely for log scale for instance
+              type: "linear",
               display: true,
               position: "left",
               id: "y-axis-1",
@@ -360,6 +415,56 @@
 </script>
 
 <script>
+  function createHistoryChart(historyData) {
+    var canvasContainer = document.getElementById('canvas-container');
+    var canvas = document.createElement("CANVAS");
+    canvasContainer.style.width = 300;
+    canvasContainer.appendChild(canvas);
+    historyChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: Object.keys(historyData["averageActorLoss"]),
+        datasets: [
+          {
+            label: 'Actor loss',
+            yAxisID: 'y-axis-1',
+            fill: false,
+            borderColor: "#E74C3C",
+            data: historyData['averageActorLoss']
+          },
+          {
+            label: 'Critic loss',
+            yAxisID: 'y-axis-1',
+            fill: false,
+            borderColor: "#16A085",
+            data: historyData['averageCriticLoss']
+          }
+        ]
+      },
+      options: {
+        title: {
+          display: true,
+          text: 'Evolution average history'
+        },
+        scales: {
+          yAxes: [
+            {
+              type: "linear",
+              display: true,
+              position: "left",
+              id: "y-axis-1",
+            }
+          ],
+        }
+      }
+    });
+  }
+
+  createHistoryChart(historyData);
+
+</script>
+
+<script>
   function createHighScoreChart() {
     var canvasContainer = document.getElementById('high-score');
     var canvas = document.createElement("CANVAS");
@@ -382,7 +487,7 @@
       options: {
         title: {
           display: true,
-          text: 'High Score'
+          text: 'Score'
         },
         scales: {
           yAxes: [
@@ -390,10 +495,7 @@
               type: "linear",
               display: true,
               position: "left",
-              id: "y-axis-1",
-              ticks: {
-                max: 1
-              }
+              id: "y-axis-1"
             }
           ],
         }
@@ -487,6 +589,7 @@
 <script>
   var iteration = 0,
     evolutionChart,
+    historyChart,
     highScoreChart,
     weightsChart;
   // create the model
@@ -507,7 +610,6 @@
       Bodies = Matter.Bodies,
       Body = Matter.Body,
       sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 200,
-      timer = 0,
       multiplier = 1;
 
     createWeightsChart();
@@ -601,15 +703,6 @@
     // run the renderer
     Render.run(render);
 
-    function reset() {
-      iteration++;
-
-      Matter.Render.stop(render); // this only stop renderer but not destroy canvas
-      render.canvas.remove();
-      timer = 0;
-      initEnvironment();
-    }
-
     function addInput() {
       sensorDistanceFM = colliderFM.getSensorDistance()
       sensorDistanceFL = colliderFL.getSensorDistance()
@@ -625,19 +718,21 @@
         0, 1, 2, 3,
       ];
 
-      let reward = (
-        50 * Math.max(car.speed, 0)
-        - Math.min(200 - sensorDistanceFM, 0)
-        + Math.abs(50 * Math.cos(car.angle))
-      ) / 200;
-      if(sensorDistanceFM < 20) {
-        reward = 0;
+      if (previousAction === 0 && sensorDistanceFM > 150) {
+        reward += 1;
+      }
+      if (previousAction === 3 && sensorDistanceFM > 150) {
+        reward -= 10;
+      }
+      if (sensorDistanceFM < 100) {
+        reward -= 10;
+      } else if (sensorDistanceFM < 150) {
+        reward -= 5;
+      } else {
+        reward += 1;
       }
 
-      let action = actorCritic.getAction(
-        state,
-        actions
-      )
+      let action = actorCritic.getAction(state, actions);
       if (previousState.length > 0) {
         actorCritic.trainModel(previousState, previousAction, previousReward, state, 0);
       }
@@ -689,7 +784,14 @@
             obstacles = Math.min(obstacles, 5);
           }
           localStorage.setItem('obstacles', obstacles);
-          location.reload();
+          historyData['averageActorLoss'].push(
+            actorCritic.getAverageActorLoss()
+          );
+          historyData['averageCriticLoss'].push(
+            actorCritic.getAverageCriticLoss()
+          );
+          localStorage.setItem('historyData', JSON.stringify(historyData));
+          window.location.href = window.location.href.split('#')[0];
         });
 
       }
@@ -701,6 +803,18 @@
   }
 
   initEnvironment();
+</script>
+<script>
+  document.getElementById('reset').onclick = function () {
+    if (window.location.hash.substr(1) !== 'reset') {
+      window.location = window.location + '#reset';
+    }
+    location.reload();
+  };
+  document.getElementById('download').onclick = function () {
+    actorCritic.actor.save('downloads://actor');
+    actorCritic.actor.save('downloads://critic');
+  };
 </script>
 
 </html>
