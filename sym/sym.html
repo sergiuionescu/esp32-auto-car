@@ -49,12 +49,9 @@
     <div class="col-sm">
       <form>
         <div class="form-group">
-          <label for="actorUnits">Actor Units</label>
-          <input class="form-control" id="actorUnits"
-                 aria-describedby="Number of units in the first actor layer">
-          <label for="criticUnits">Critic Units</label>
-          <input class="form-control" id="criticUnits"
-                 aria-describedby="Number of units in the first critic layer">
+          <label for="hiddenUnits">Hidden Units</label>
+          <input class="form-control" id="hiddenUnits"
+                 aria-describedby="Number of units in the hidden layer">
         </div>
         <div class="form-group">
           <label for="forwardReward">Forward Reward</label>
@@ -146,14 +143,19 @@
 
     buildActor() {
       const model = tf.sequential();
+      model.add(tf.layers.inputLayer({inputShape: [this.stateSize],}));
+
       model.add(tf.layers.dense({
-        units: parseInt(this.config.actorUnits),
+        units: parseInt(this.config.hiddenUnits),
         activation: 'relu',
         kernelInitializer: 'glorotUniform',
-        inputShape: [this.stateSize],
       }));
 
-      // model.add(tf.layers.flatten());
+      model.add(tf.layers.dense({
+        units: parseInt(this.config.hiddenUnits/2),
+        activation: 'relu',
+        kernelInitializer: 'glorotUniform',
+      }));
 
       model.add(tf.layers.dense({
         units: this.actionSize,
@@ -161,10 +163,11 @@
         kernelInitializer: 'glorotUniform',
       }));
 
-      model.compile({
-        optimizer: tf.train.adam(this.actorLearningRate),
-        loss: tf.losses.softmaxCrossEntropy
-      });
+      // model.compile({
+      //   optimizer: tf.train.adam(this.actorLearningRate),
+      //   loss: tf.losses.softmaxCrossEntropy
+      // });
+      this.compile(model, this.actorLearningRate);
 
       return model;
     }
@@ -172,14 +175,19 @@
     buildCritic() {
       const model = tf.sequential();
 
+      model.add(tf.layers.inputLayer({inputShape: [this.stateSize],}));
+
       model.add(tf.layers.dense({
-        units: parseInt(this.config.criticUnits),
+        units: parseInt(this.config.hiddenUnits),
         activation: 'relu',
         kernelInitializer: 'glorotUniform',
-        inputShape: [this.stateSize],
       }));
 
-      // model.add(tf.layers.flatten());
+      model.add(tf.layers.dense({
+        units: parseInt(this.config.hiddenUnits/2),
+        activation: 'relu',
+        kernelInitializer: 'glorotUniform',
+      }));
 
       model.add(tf.layers.dense({
         units: this.valueSize,
@@ -187,14 +195,14 @@
         kernelInitializer: 'glorotUniform',
       }));
 
-      this.compile(model);
+      this.compile(model, this.criticLearningRate);
 
       return model;
     }
 
-    compile(model) {
+    compile(model, learningRate) {
       model.compile({
-        optimizer: tf.train.adam(this.criticLearningRate),
+        optimizer: tf.train.adam(learningRate),
         loss: tf.losses.huberLoss,
       });
     }
@@ -262,11 +270,11 @@
       let name = localStorage.getItem('name');
       if (name != "undefined") {
         tf.loadLayersModel('localstorage://actor').then(model => {
-          this.compile(model);
+          this.compile(model, this.actorLearningRate);
           this.actor = model;
         });
         tf.loadLayersModel('localstorage://critic').then(model => {
-          this.compile(model);
+          this.compile(model, this.criticLearningRate);
           this.critic = model;
         });
         this.name = name;
@@ -295,8 +303,7 @@
   }
 
   let config = {
-    actorUnits: 800,
-    criticUnits: 40,
+    hiddenUnits: 200,
     forwardReward: 1,
     proximityThreshold: 100,
     proximityPenalty: -10,
@@ -321,8 +328,8 @@
 <script>
   class Nomarlizer {
     normalizeSensorDistance(sensorDistance) {
-      sensorDistance = Math.round(sensorDistance/10);
-      return sensorDistance / 20;
+      // sensorDistance = Math.round(sensorDistance/10);
+      return sensorDistance / 200;
     }
 
     normalizeFeatures(features) {
@@ -659,17 +666,9 @@
 </script>
 <script>
   var evolutionChart,
-    advantageChart,
     historyChart,
     highScoreChart,
     weightsChart;
-  // create the model
-  const model = tf.sequential();
-  model.add(tf.layers.dense({units: 10, inputShape: [10], activation: 'relu'}));
-  model.add(tf.layers.dense({units: 8, inputShape: [10], activation: 'relu'}));
-  model.add(tf.layers.dense({units: 4, inputShape: [8], activation: 'relu'}));
-  model.add(tf.layers.dense({units: 2, inputShape: [4]}));
-  model.compile({loss: 'meanSquaredError', optimizer: 'adam', metrics: ['accuracy']});
   latest_loss = 1;
   latest_accuracy = 0;
 
@@ -877,7 +876,7 @@
 <script>
   document.getElementById('save').onclick = function () {
     for (const key in config) {
-      if (document.getElementById(key) !== undefined) {
+      if (document.getElementById(key)) {
         config[key] = document.getElementById(key).value;
       }
     }
@@ -894,7 +893,7 @@
 </script>
 <script>
   for (const key in config) {
-    if (document.getElementById(key) !== undefined) {
+    if (document.getElementById(key)) {
       document.getElementById(key).value = config[key];
     }
   }
