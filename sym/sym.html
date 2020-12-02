@@ -127,12 +127,17 @@
         this.load();
       }
 
+      this.commonLayer = tf.layers.dense({
+        units: parseInt(this.config.hiddenUnits),
+        activation: 'relu',
+        kernelInitializer: 'glorotUniform',
+      });
       this.actor = this.actor ?? this.buildActor();
       this.critic = this.critic ?? this.buildCritic();
       this.name = this.name ?? new Date().toLocaleString('en-in');
 
 
-      this.epoch = 0;
+      this.step = 0;
       this.latestActorLoss = 0;
       this.latestCriticLoss = 0;
 
@@ -145,17 +150,7 @@
       const model = tf.sequential();
       model.add(tf.layers.inputLayer({inputShape: [this.stateSize],}));
 
-      model.add(tf.layers.dense({
-        units: parseInt(this.config.hiddenUnits),
-        activation: 'relu',
-        kernelInitializer: 'glorotUniform',
-      }));
-
-      model.add(tf.layers.dense({
-        units: parseInt(this.config.hiddenUnits/2),
-        activation: 'relu',
-        kernelInitializer: 'glorotUniform',
-      }));
+      model.add(this.commonLayer);
 
       model.add(tf.layers.dense({
         units: this.actionSize,
@@ -177,17 +172,7 @@
 
       model.add(tf.layers.inputLayer({inputShape: [this.stateSize],}));
 
-      model.add(tf.layers.dense({
-        units: parseInt(this.config.hiddenUnits),
-        activation: 'relu',
-        kernelInitializer: 'glorotUniform',
-      }));
-
-      model.add(tf.layers.dense({
-        units: parseInt(this.config.hiddenUnits/2),
-        activation: 'relu',
-        kernelInitializer: 'glorotUniform',
-      }));
+      model.add(this.commonLayer);
 
       model.add(tf.layers.dense({
         units: this.valueSize,
@@ -213,7 +198,7 @@
       });
 
       let policyFlat = policy.dataSync();
-      pushToWeightsChart(this.epoch, policyFlat);
+      pushToWeightsChart(this.step, policyFlat);
 
       let action = chance.weighted(actions, policyFlat)
       if (this.act) {
@@ -224,9 +209,9 @@
     }
 
     trainModel(state, action, reward, nextState) {
+      let normalizedState = normalizer.normalizeFeatures(state);
       let advantages = new Array(this.actionSize).fill(0);
 
-      let normalizedState = normalizer.normalizeFeatures(state);
       let tfState = tf.tensor2d(normalizedState, [1, state.length]);
       let normalizedNextState = normalizer.normalizeFeatures(nextState);
       let tfNextState = tf.tensor2d(normalizedNextState, [1, nextState.length]);
@@ -237,7 +222,7 @@
       let target = reward + this.discountFactor * predictedNextStateValue;
       let advantage = target - predictedCurrentStateValue;
       advantages[action] = advantage;
-      // console.log(normalizedState, normalizedNextState, action, target, advantages);
+      // console.log(action, reward);
 
       this.actor.fit(tfState, tf.tensor([advantages]), {
         epochs: 1,
@@ -256,8 +241,8 @@
       );
 
       this.advantages.push(advantage);
-      pushToEvolutionChart(this.epoch, this.latestActorLoss, this.latestCriticLoss, advantage);
-      this.epoch++;
+      pushToEvolutionChart(this.step, this.latestActorLoss, this.latestCriticLoss, advantage);
+      this.step++;
     }
 
     async save() {
@@ -317,7 +302,7 @@
   }
   let actorCritic = new ActorCritic(
     3,
-    4,
+    3,
     window.location.hash.substr(1) === 'reset',
     window.location.hash.substr(1) === 'act',
     config
@@ -328,8 +313,8 @@
 <script>
   class Nomarlizer {
     normalizeSensorDistance(sensorDistance) {
-      // sensorDistance = Math.round(sensorDistance/10);
-      return sensorDistance / 200;
+      sensorDistance = Math.round(sensorDistance/10);
+      return sensorDistance / 20;
     }
 
     normalizeFeatures(features) {
@@ -462,8 +447,8 @@
     });
   }
 
-  function pushToEvolutionChart(epoch, actorLoss, criticLoss, advantage) {
-    evolutionChart.data.labels.push(epoch);
+  function pushToEvolutionChart(step, actorLoss, criticLoss, advantage) {
+    evolutionChart.data.labels.push(step);
     evolutionChart.data.datasets[0].data.push(actorLoss);
     evolutionChart.data.datasets[1].data.push(criticLoss);
     evolutionChart.data.datasets[2].data.push(advantage);
@@ -576,14 +561,14 @@
     });
   }
 
-  function pushToHighScoreChart(epoch, score) {
-    highScoreChart.data.labels.push(epoch);
+  function pushToHighScoreChart(step, score) {
+    highScoreChart.data.labels.push(step);
     highScoreChart.data.datasets[0].data.push(score);
     if (highScoreChart.data.labels.length > 50) {
       highScoreChart.data.labels.shift();
       highScoreChart.data.datasets[0].data.shift();
     }
-    if (score > 0) {
+    if (score >= 0) {
       highScoreChart.data.datasets[0].backgroundColor = "#157041";
     } else {
       highScoreChart.data.datasets[0].backgroundColor = "#c30101";
@@ -648,8 +633,8 @@
     });
   }
 
-  function pushToWeightsChart(epoch, weights) {
-    weightsChart.data.labels.push(epoch);
+  function pushToWeightsChart(step, weights) {
+    weightsChart.data.labels.push(step);
     weightsChart.data.datasets[0].data.push(weights[0]);
     weightsChart.data.datasets[1].data.push(weights[1]);
     weightsChart.data.datasets[2].data.push(weights[2]);
@@ -766,8 +751,10 @@
 
     Events.on(engine, 'collisionStart', function (event) {
       collisions++;
-      reward -= 100;
     });
+    Events.on(engine, 'collisionActive', function (event) {
+      reward += config.collisionPenalty;
+    })
 
     // run the engine
     Engine.run(engine);
@@ -776,9 +763,7 @@
     Render.run(render);
 
     function addInput() {
-      sensorDistanceFM = colliderFM.getSensorDistance()
-      sensorDistanceFL = colliderFL.getSensorDistance()
-      sensorDistanceFR = colliderFR.getSensorDistance()
+      let end = false;
 
       let state = [
         sensorDistanceFM,
@@ -787,14 +772,23 @@
       ];
 
       const actions = [
-        0, 1, 2, 3,
+        0, 1, 2,
       ];
+
+      sensorDistanceFM = colliderFM.getSensorDistance()
+      sensorDistanceFL = colliderFL.getSensorDistance()
+      sensorDistanceFR = colliderFR.getSensorDistance()
 
       if (previousAction === 0) {
         reward += config.forwardReward;
       }
-      if (sensorDistanceFM < config.proximityThreshold && sensorDistanceFM < previousSensorDistanceFM) {
+      if (sensorDistanceFM < config.proximityThreshold
+        && parseInt(sensorDistanceFM) <= parseInt(previousSensorDistanceFM)) {
         reward += config.proximityPenalty;
+      }
+
+      if (reward < -10) {
+        end = true;
       }
 
       let action = actorCritic.getAction(state, actions);
@@ -839,8 +833,8 @@
         y: car.position.y + carWidth * Math.cos(car.angle) / 2
       }, {x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle)});
 
-      pushToHighScoreChart(actorCritic.epoch, reward);
-      if (actorCritic.epoch > 400) {
+      pushToHighScoreChart(actorCritic.step, reward);
+      if (actorCritic.step > 400 || end) {
         actorCritic.save().then(function () {
           if (collisions > 0) {
             obstacles--;
