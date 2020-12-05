@@ -1,0 +1,7 @@
+{
+  "hiddenUnits": 128,
+  "forwardReward": 1,
+  "proximityThreshold": 20,
+  "proximityPenalty": -2,
+  "collisionPenalty": -100
+}

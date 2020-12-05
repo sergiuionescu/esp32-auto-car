@@ -23,18 +23,16 @@
 <body>
 <div class="container">
   <div class="row">
-    <div class="col-sm">
+    <div class="col">
       <button class='btn disabled' id='model_name' name='model_name'><i class='fa fa-info'> Model: <i id="name"></i></i>
       </button>
       <button class='btn' id='download' name='download'><i class='fa fa-download'> Download</i></button>
-    </div>
-    <div class="col-sm">
-
+      <button class='btn' id='pretrained' name='pretrained'><i class='fa fa-hdd-o'> Load pretrained model</i></button>
     </div>
   </div>
   <div class="row">
     <div class="col">
-      <div id="high-score">
+      <div id="reward-chart">
       </div>
     </div>
     <div class="col">
@@ -100,13 +98,15 @@
     src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script>
+  let reset = window.location.hash.substr(1) === 'reset';
   let historyData = localStorage.getItem('historyData')
-  && window.location.hash.substr(1) !== 'reset' ? JSON.parse(localStorage.getItem('historyData')) : {
+  && !reset ? JSON.parse(localStorage.getItem('historyData')) : {
     'averageActorLoss': [],
     'averageCriticLoss': [],
     'advantage': []
   };
   let reward = 0;
+  let obstacles = localStorage.getItem('obstacles') && !reset ? localStorage.getItem('obstacles') : 0;
 </script>
 <script>
   class ActorCritic {
@@ -158,11 +158,7 @@
         kernelInitializer: 'glorotUniform',
       }));
 
-      // model.compile({
-      //   optimizer: tf.train.adam(this.actorLearningRate),
-      //   loss: tf.losses.softmaxCrossEntropy
-      // });
-      this.compile(model, this.actorLearningRate);
+      this.compile(model, this.actorLearningRate, tf.losses.softmaxCrossEntropy);
 
       return model;
     }
@@ -180,15 +176,15 @@
         kernelInitializer: 'glorotUniform',
       }));
 
-      this.compile(model, this.criticLearningRate);
+      this.compile(model, this.criticLearningRate, tf.losses.huberLoss);
 
       return model;
     }
 
-    compile(model, learningRate) {
+    compile(model, learningRate, loss) {
       model.compile({
         optimizer: tf.train.adam(learningRate),
-        loss: tf.losses.huberLoss,
+        loss: loss,
       });
     }
 
@@ -251,15 +247,15 @@
       localStorage.setItem('name', this.name);
     }
 
-    load() {
+    load(actorPath = 'localstorage://actor', criticPath = 'localstorage://critic') {
       let name = localStorage.getItem('name');
       if (name != "undefined") {
-        tf.loadLayersModel('localstorage://actor').then(model => {
-          this.compile(model, this.actorLearningRate);
+        tf.loadLayersModel(actorPath).then(model => {
+          this.compile(model, this.actorLearningRate, tf.losses.softmaxCrossEntropy);
           this.actor = model;
         });
-        tf.loadLayersModel('localstorage://critic').then(model => {
-          this.compile(model, this.criticLearningRate);
+        tf.loadLayersModel(criticPath).then(model => {
+          this.compile(model, this.criticLearningRate, tf.losses.huberLoss);
           this.critic = model;
         });
         this.name = name;
@@ -288,10 +284,10 @@
   }
 
   let config = {
-    hiddenUnits: 200,
+    hiddenUnits: 128,
     forwardReward: 1,
-    proximityThreshold: 100,
-    proximityPenalty: -10,
+    proximityThreshold: 20,
+    proximityPenalty: -2,
     collisionPenalty: -100
   };
   if (localStorage.getItem('config')) {
@@ -523,18 +519,18 @@
 </script>
 
 <script>
-  function createHighScoreChart() {
-    var canvasContainer = document.getElementById('high-score');
+  function createRewardChart() {
+    var canvasContainer = document.getElementById('reward-chart');
     var canvas = document.createElement("CANVAS");
     canvasContainer.style.width = 300;
     canvasContainer.appendChild(canvas);
-    highScoreChart = new Chart(canvas, {
+    rewardChart = new Chart(canvas, {
       type: 'bar',
       data: {
         labels: [],
         datasets: [
           {
-            label: 'score',
+            label: 'reward',
             yAxisID: 'y-axis-1',
             fill: false,
             backgroundColor: "#157041",
@@ -545,7 +541,7 @@
       options: {
         title: {
           display: true,
-          text: 'Score'
+          text: 'Reward'
         },
         scales: {
           yAxes: [
@@ -561,22 +557,22 @@
     });
   }
 
-  function pushToHighScoreChart(step, score) {
-    highScoreChart.data.labels.push(step);
-    highScoreChart.data.datasets[0].data.push(score);
-    if (highScoreChart.data.labels.length > 50) {
-      highScoreChart.data.labels.shift();
-      highScoreChart.data.datasets[0].data.shift();
+  function pushToRewardChart(step, score) {
+    rewardChart.data.labels.push(step);
+    rewardChart.data.datasets[0].data.push(score);
+    if (rewardChart.data.labels.length > 50) {
+      rewardChart.data.labels.shift();
+      rewardChart.data.datasets[0].data.shift();
     }
     if (score >= 0) {
-      highScoreChart.data.datasets[0].backgroundColor = "#157041";
+      rewardChart.data.datasets[0].backgroundColor = "#157041";
     } else {
-      highScoreChart.data.datasets[0].backgroundColor = "#c30101";
+      rewardChart.data.datasets[0].backgroundColor = "#c30101";
     }
-    highScoreChart.update();
+    rewardChart.update();
   }
 
-  createHighScoreChart();
+  createRewardChart();
 
 </script>
 <script>
@@ -652,7 +648,7 @@
 <script>
   var evolutionChart,
     historyChart,
-    highScoreChart,
+    rewardChart,
     weightsChart;
   latest_loss = 1;
   latest_accuracy = 0;
@@ -682,14 +678,16 @@
         showDebug: false,
         showVelocity: false,
         showCollisions: false,
-        wireframes: false
+        wireframes: false,
+        width: 800,
+        height: 400
       }
     });
 
     //create the car
     let
       carX = 60,
-      carY = 300,
+      carY = 200,
       carLength = 50,
       carWidth = carLength / 5 * 3,
       carBody = Bodies.rectangle(carX, carY, carLength, carWidth),
@@ -715,8 +713,6 @@
       }),
       collisions = 0;
 
-    let obstacles = localStorage.getItem('obstacles') ?? 0;
-
     let previousState = [],
       previousAction = 0,
       previousReward = 0,
@@ -728,13 +724,13 @@
     let boxes = [];
 
     for (i = 0; i < obstacles; i++) {
-      let box = Bodies.rectangle(800 * Math.random(), 600 * Math.random(), 100 + 100 * Math.random(), 100 + 100 * Math.random(), {isStatic: true});
+      let box = Bodies.rectangle(800 * Math.random(), 400 * Math.random(), 50 + 100 * Math.random(), 50 + 100 * Math.random(), {isStatic: true});
       boxes.push(box);
     }
-    let wallB = Bodies.rectangle(400, 600, 810, 20, {isStatic: true});
+    let wallB = Bodies.rectangle(400, 400, 810, 20, {isStatic: true});
     let wallT = Bodies.rectangle(400, 0, 810, 20, {isStatic: true});
-    let wallL = Bodies.rectangle(0, 305, 20, 810, {isStatic: true});
-    let wallR = Bodies.rectangle(800, 305, 20, 810, {isStatic: true});
+    let wallL = Bodies.rectangle(0, 205, 20, 810, {isStatic: true});
+    let wallR = Bodies.rectangle(800, 205, 20, 810, {isStatic: true});
     boxes.push(wallB);
     boxes.push(wallT);
     boxes.push(wallL);
@@ -763,14 +759,7 @@
     Render.run(render);
 
     function addInput() {
-      let end = false;
-
-      let state = [
-        sensorDistanceFM,
-        sensorDistanceFL,
-        sensorDistanceFR
-      ];
-
+      let done = false;
       const actions = [
         0, 1, 2,
       ];
@@ -778,6 +767,12 @@
       sensorDistanceFM = colliderFM.getSensorDistance()
       sensorDistanceFL = colliderFL.getSensorDistance()
       sensorDistanceFR = colliderFR.getSensorDistance()
+
+      let state = [
+        sensorDistanceFM,
+        sensorDistanceFL,
+        sensorDistanceFR
+      ];
 
       if (previousAction === 0) {
         reward += config.forwardReward;
@@ -788,12 +783,12 @@
       }
 
       if (reward < -10) {
-        end = true;
+        done = true;
       }
 
       let action = actorCritic.getAction(state, actions);
       if (previousState.length > 0) {
-        actorCritic.trainModel(previousState, previousAction, previousReward, state, 0);
+        actorCritic.trainModel(previousState, previousAction, reward, state);
       }
 
       previousState = state;
@@ -833,8 +828,8 @@
         y: car.position.y + carWidth * Math.cos(car.angle) / 2
       }, {x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle)});
 
-      pushToHighScoreChart(actorCritic.step, reward);
-      if (actorCritic.step > 400 || end) {
+      pushToRewardChart(actorCritic.step, reward);
+      if (actorCritic.step > 400 || done) {
         actorCritic.save().then(function () {
           if (collisions > 0) {
             obstacles--;
@@ -868,6 +863,14 @@
   initEnvironment();
 </script>
 <script>
+  function updateConfigUi() {
+    for (const key in config) {
+      if (document.getElementById(key)) {
+        document.getElementById(key).value = config[key];
+      }
+    }
+  }
+
   document.getElementById('save').onclick = function () {
     for (const key in config) {
       if (document.getElementById(key)) {
@@ -880,16 +883,19 @@
     }
     location.reload();
   };
+  document.getElementById('pretrained').onclick = function () {
+    let path = 'model/'
+    $.get(path + 'config.json', function (data) {
+      config = data;
+      updateConfigUi();
+    });
+    actorCritic.load(path + 'actor.json', path + 'critic.json');
+  }
+
   document.getElementById('download').onclick = function () {
     actorCritic.actor.save('downloads://actor');
-    actorCritic.actor.save('downloads://critic');
+    actorCritic.critic.save('downloads://critic');
   };
-</script>
-<script>
-  for (const key in config) {
-    if (document.getElementById(key)) {
-      document.getElementById(key).value = config[key];
-    }
-  }
+  updateConfigUi();
 </script>
 </html>
