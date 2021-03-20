@@ -1,14 +1,14 @@
-# ESP32 autonoumous toy car
+# ESP32 autonomous toy car
 The projects contains software for assisting a toy car navigation.
 
 #Components
 
 - Logic board: 1xESP32 (Plusivo)
 - Motor controller: 1xTB6612FNG
-- Ultrasound sensor: 2x
+- Ultrasound sensor: 3x
 - 1xTest board
-- 2xUltrasound sensor mounts
-- Car Chasis
+- 3xUltrasound sensor mounts
+- Car Chassis
 - 2x5V motors
 
 #Circuit connection
