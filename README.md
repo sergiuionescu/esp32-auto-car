@@ -1,6 +1,17 @@
 # ESP32 autonomous toy car
-The projects contains software for assisting a toy car navigation.
+The project contains software for assisting a toy car navigation.
 
+# Mission plan
+
+Train a machine learning model that learns to navigate an environment and use it to control the physical device.
+
+# Training environment
+Allows training and downloading the trained model.
+
+https://sergiuionescu.github.io/esp32-auto-car/sym/sym.html
+
+
+# Hardware
 #Components
 
 - Logic board: 1xESP32 (Plusivo)
