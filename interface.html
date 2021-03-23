@@ -31,6 +31,8 @@
     </div>
   </div>
 </div>
+<div id='telemetry'>
+</div>
 <script src='https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js'></script>
 <script src='https://sergiuionescu.github.io/esp32-auto-car/sym/js/chance.min.js'></script>
 <script src='joy.min.js'></script>
@@ -71,9 +73,9 @@
       case 0:
         return [200, 200];
       case 1:
-        return [200, -200];
+        return [255, -255];
       case 2:
-        return [-200, 200];
+        return [-255, 255];
     }
 
     return action;
@@ -111,6 +113,7 @@
           updateDistance('distanceFL', message['data']);
           updateDistance('distanceFR', message['data']);
           updateDistance('distanceFM', message['data']);
+          updateTelemetry(message['data']);
         };
       }
     };
@@ -126,6 +129,9 @@
     let newWidth = parseInt(distance / 5);
     document.getElementById(id).style.width = newWidth + '%';
     document.getElementById(id).innerHTML = distance + 'cm';
+  }
+  function updateTelemetry(data) {
+    // document.getElementById('telemetry').innerHTML = JSON.stringify(data);
   }
   function getProgress() {
     let throttle = leftJoystick.GetY();
