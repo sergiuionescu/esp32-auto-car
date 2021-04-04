@@ -91,6 +91,9 @@
   let playCursor = 0;
   let playbackOn = false;
   let socket = null;
+  let telemetryCount = 0;
+  let actionCount = 0;
+  let loopMs = 0;
   let state = [200, 200, 200];
 
 
@@ -131,7 +134,24 @@
     document.getElementById(id).innerHTML = distance + 'cm';
   }
   function updateTelemetry(data) {
-    // document.getElementById('telemetry').innerHTML = JSON.stringify(data);
+    telemetryCount += 1;
+    let telemetryText = '<ul>';
+    data['actionCount'] = actionCount;
+    data['telemetryCount'] = telemetryCount;
+
+    data['loopTime'] = data['loopMs'] - loopMs;
+    loopMs = data['loopMs'];
+    let count = 0;
+    for (const key in data) {
+      telemetryText += '<li>' + key + ': ' + data[key] + '</li>';
+      count ++;
+      if (count > 2) {
+        telemetryText += '</ul><ul>';
+        count = 0;
+      }
+    }
+    telemetryText += '</ul>';
+    document.getElementById('telemetry').innerHTML = telemetryText;
   }
   function getProgress() {
     let throttle = leftJoystick.GetY();
@@ -152,6 +172,7 @@
   function performAction(left, right, callback) {
     if(socket.readyState === socket.OPEN){
       socket.send(JSON.stringify({'right': right, 'left': left}));
+      actionCount += 1;
     } else {
       console.log('Waiting for socket...');
     }
@@ -292,6 +313,12 @@
       }
       .right {
           float:right;
+      }
+      #telemetry {
+          font-size: 8px;
+      }
+      ul {
+          float:left;
       }
     </style>
     <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>

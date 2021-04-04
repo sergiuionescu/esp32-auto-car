@@ -1,5 +1,6 @@
 import json
 import random
+import time
 
 from SimpleWebSocketServer import SimpleWebSocketServer, WebSocket
 
@@ -13,7 +14,8 @@ class SimpleEcho(WebSocket):
             'data': {
                 'distanceFL': random.randint(0, 200),
                 'distanceFM': random.randint(0, 200),
-                'distanceFR': random.randint(0, 200)
+                'distanceFR': random.randint(0, 200),
+                'loopMs': round(time.time() * 1000)
             }
         }
         self.sendMessage(json.dumps(message))

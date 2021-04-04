@@ -20,6 +20,8 @@ const int trigPinFL = 32;
 const int echoPinFR = 5;
 const int trigPinFR = 4;
 
+const int pulseTimeout = 8000;
+
 const char* ssid     = "ESP32";
 const char* password = "987654321";
 
@@ -71,6 +73,9 @@ float gyroZ;
 float magX;
 float magY;
 float magZ;
+
+unsigned long loopMs; 
+unsigned long loopTimeMs;
 
 void setup() {
   Serial.begin(115200);
@@ -134,7 +139,13 @@ void setup() {
 }
 
 void loop() {
-  delay(10);
+  delay(5);
+  unsigned long currentTimeMs = millis();
+  if(loopMs > 0) {
+    loopTimeMs = currentTimeMs - loopMs;
+  } 
+  loopMs = currentTimeMs;
+  
   updateDistance();  
   updatePWM();
   readMPU();
@@ -143,7 +154,7 @@ void loop() {
 
 
 void handleIndex(AsyncWebServerRequest *request) {
-  request->send(200, "text/html", "<html><body><div class='container'>  <div class='sensors'>    <div class='progress' id='distanceFL' style='left:0;top:0'></div>    <div class='progress' id='distanceFM' style='left:42.5%;top:0'></div>    <div class='progress' id='distanceFR' style='right:0;top:0'></div>  </div>  <div class='toolbar'>    <button class='btn' id='record' name='record'><i class='fa fa-circle'></i></button>    <button class='btn' id='stop' name='stop' disabled='disabled'><i class='fa fa-stop'></i></button>    <button class='btn' id='play' name='play' disabled='disabled'><i class='fa fa-play'></i></button>    <button class='btn off' id='assist' name='assist'><i class='fa fa-magic'></i></button>    <button class='btn off' id='auto' name='auto'><i class='fa fa-bomb'></i></button>    <button class='btn right' id='settings' name='settings'><i class='fa fa-cogs'></i></button>    <div id='counter'></div>  </div>  <div>    <div class='left'>      <div          id='left_joystick'          style='width:200px;height:200px;margin-right:50px;margin-left:50px'      ></div>    </div>    <div class='right'>      <div          id='right_joystick'          style='width:200px;height:200px;margin-right:50px;margin-left:50px'      ></div>    </div>  </div></div><div id='telemetry'></div><script src='https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js'></script><script src='https://sergiuionescu.github.io/esp32-auto-car/sym/js/chance.min.js'></script><script src='joy.min.js'></script><script>  class Nomarlizer {    normalizeSensorDistance(sensorDistance) {      sensorDistance = Math.round(sensorDistance/10);      return sensorDistance / 20;    }    normalizeFeatures(features) {      return [        this.normalizeSensorDistance(features[0]),        this.normalizeSensorDistance(features[1]),        this.normalizeSensorDistance(features[2]),      ];    }  }  normalizer = new Nomarlizer();</script><script>  let assist = false;  let auto = false;  let actor = false;  function getAssistedAction(state, action) {    if(!auto && (!assist || state[0] > 30)) {      return action;    }    let policy = actor.predict(tf.tensor2d(normalizer.normalizeFeatures(state), [1, state.length]), {      batchSize: 1,    });    let policyFlat = policy.dataSync();    action = chance.weighted([0, 1, 2], policyFlat);    console.log(state, action);    switch (action) {      case 0:        return [200, 200];      case 1:        return [255, -255];      case 2:        return [-255, 255];    }    return action;  }</script><script>  let leftJoystick = new JoyStick('left_joystick');  let rightJoystick = new JoyStick('right_joystick');  let maxThrottle = 220;  let recordingOn = false;  let recording = [];  let playCursor = 0;  let playbackOn = false;  let socket = null;  let state = [200, 200, 200];  let hostname = location.hostname;  let uri = 'ws://' + hostname + '/ws';  if(hostname === 'localhost') {    uri = 'ws://' + hostname + ':8000';  }  function initWebsocket() {    socket = new WebSocket(uri);    socket.onopen = function () {      if (socket.readyState === socket.OPEN) {        socket.onmessage = function (message) {          message = JSON.parse(message.data);          state = [            message['data']['distanceFM'],            message['data']['distanceFL'],            message['data']['distanceFR'],          ];          updateDistance('distanceFL', message['data']);          updateDistance('distanceFR', message['data']);          updateDistance('distanceFM', message['data']);          updateTelemetry(message['data']);        };      }    };    socket.onclose = function () {      console.log('Reconnecting to websocket...');      initWebsocket();    };  }  initWebsocket();  function updateDistance(id, data) {    let distance = Math.min(data[id], 200);    let newWidth = parseInt(distance / 5);    document.getElementById(id).style.width = newWidth + '%';    document.getElementById(id).innerHTML = distance + 'cm';  }  function updateTelemetry(data) {    document.getElementById('telemetry').innerHTML = JSON.stringify(data);  }  function getProgress() {    let throttle = leftJoystick.GetY();    let turn = rightJoystick.GetX();    let left = (throttle * maxThrottle) / 100;    left = left + ((maxThrottle - left) * turn) / 100;    let right = (throttle * maxThrottle) / 100;    right = right - ((maxThrottle - right) * turn) / 100;    if (recordingOn) {      recording.push({ left: left, right: right });      document.getElementById('counter').innerHTML = recording.length;    }    if (!playbackOn) {      action = getAssistedAction(state, [left, right]);      performAction(action[0], action[1], getProgress);    }  }  function performAction(left, right, callback) {    if(socket.readyState === socket.OPEN){      socket.send(JSON.stringify({'right': right, 'left': left}));    } else {      console.log('Waiting for socket...');    }    setTimeout(callback, 50);  }  getProgress();  function playback() {    if (playCursor >= recording.length) {      playbackOn = false;      document.getElementById('record').disabled = '';      document.getElementById('stop').disabled = '';      getProgress();      return;    }    document.getElementById('counter').innerHTML = playCursor;    left = recording[playCursor]['left'];    right = recording[playCursor]['right'];    playCursor++;    performAction(left, right, playback);  }  document.getElementById('record').addEventListener('click', function() {    document.getElementById('record').disabled = 'disabled';    document.getElementById('stop').disabled = '';    recordingOn = true;    recording = [];  });  document.getElementById('stop').addEventListener('click', function() {    document.getElementById('stop').disabled = 'disabled';    document.getElementById('record').disabled = '';    document.getElementById('play').disabled = '';    recordingOn = false;  });  document.getElementById('play').addEventListener('click', function() {    document.getElementById('record').disabled = 'disabled';    document.getElementById('stop').disabled = '';    playbackOn = true;    playCursor = 0;    playback();  });  document.getElementById('assist').addEventListener('click', function() {    assist = !assist;    if(assist) {      document.getElementById('assist').classList.remove('off');    } else {      document.getElementById('assist').classList.add('off');    }  });  document.getElementById('auto').addEventListener('click', function() {    auto = !auto;    if(auto) {      document.getElementById('auto').classList.remove('off');    } else {      document.getElementById('auto').classList.add('off');    }  });</script><script>  if(typeof tf === 'undefined') {    document.getElementById('assist').disabled = 'disabled';  } else {    tf.loadLayersModel('https://sergiuionescu.github.io/esp32-auto-car/sym/model/actor.json').then(model => {      actor = model;    });  }</script></body><head>    <meta name='viewport' content='initial-scale=1, maximum-scale=1'>    <style>      html, body {        overflow-x: hidden;      }      body {          position: relative;          font-size: 2em;      }      div.container {        max-width: 800px;        max-height: 600px;        width: 100%;        top: 0;        bottom: 0;        left: 0;        right: 0;        margin: auto;      }      div.sensors {        margin-top: 40px;      }      div.progress {        position: absolute;        margin: auto;        width: 15%;        height: 2%;        background-color: blueviolet;      }      div.control {        position: absolute;        margin: auto;        width: 80%;        height: 70%;        top: 0;        bottom: 0;        left: 0;        right: 0;      }      div.left {        width: 50%;        float: left;      }      div.right {        width: 50%;        float: left;      }      label {        position: absolute;        left: 0;        right: 0;        display: block;        margin-bottom: 10px;      }      input {        font-size: 30px;      }      .btn {        background-color: #0363c4;        border: none;        color: white;        padding: 12px 16px;        font-size: 16px;        cursor: pointer;      }      .btn:disabled {        background-color: #9a9b9b;      }      .off {          background-color: #772626;      }      .right {          float:right;      }    </style>    <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>  </head></html>\n");
+  request->send(200, "text/html", "<html><body><div class='container'>  <div class='sensors'>    <div class='progress' id='distanceFL' style='left:0;top:0'></div>    <div class='progress' id='distanceFM' style='left:42.5%;top:0'></div>    <div class='progress' id='distanceFR' style='right:0;top:0'></div>  </div>  <div class='toolbar'>    <button class='btn' id='record' name='record'><i class='fa fa-circle'></i></button>    <button class='btn' id='stop' name='stop' disabled='disabled'><i class='fa fa-stop'></i></button>    <button class='btn' id='play' name='play' disabled='disabled'><i class='fa fa-play'></i></button>    <button class='btn off' id='assist' name='assist'><i class='fa fa-magic'></i></button>    <button class='btn off' id='auto' name='auto'><i class='fa fa-bomb'></i></button>    <button class='btn right' id='settings' name='settings'><i class='fa fa-cogs'></i></button>    <div id='counter'></div>  </div>  <div>    <div class='left'>      <div          id='left_joystick'          style='width:200px;height:200px;margin-right:50px;margin-left:50px'      ></div>    </div>    <div class='right'>      <div          id='right_joystick'          style='width:200px;height:200px;margin-right:50px;margin-left:50px'      ></div>    </div>  </div></div><div id='telemetry'></div><script src='https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js'></script><script src='https://sergiuionescu.github.io/esp32-auto-car/sym/js/chance.min.js'></script><script src='joy.min.js'></script><script>  class Nomarlizer {    normalizeSensorDistance(sensorDistance) {      sensorDistance = Math.round(sensorDistance/10);      return sensorDistance / 20;    }    normalizeFeatures(features) {      return [        this.normalizeSensorDistance(features[0]),        this.normalizeSensorDistance(features[1]),        this.normalizeSensorDistance(features[2]),      ];    }  }  normalizer = new Nomarlizer();</script><script>  let assist = false;  let auto = false;  let actor = false;  function getAssistedAction(state, action) {    if(!auto && (!assist || state[0] > 30)) {      return action;    }    let policy = actor.predict(tf.tensor2d(normalizer.normalizeFeatures(state), [1, state.length]), {      batchSize: 1,    });    let policyFlat = policy.dataSync();    action = chance.weighted([0, 1, 2], policyFlat);    console.log(state, action);    switch (action) {      case 0:        return [200, 200];      case 1:        return [255, -255];      case 2:        return [-255, 255];    }    return action;  }</script><script>  let leftJoystick = new JoyStick('left_joystick');  let rightJoystick = new JoyStick('right_joystick');  let maxThrottle = 220;  let recordingOn = false;  let recording = [];  let playCursor = 0;  let playbackOn = false;  let socket = null;  let telemetryCount = 0;  let actionCount = 0;  let loopMs = 0;  let state = [200, 200, 200];  let hostname = location.hostname;  let uri = 'ws://' + hostname + '/ws';  if(hostname === 'localhost') {    uri = 'ws://' + hostname + ':8000';  }  function initWebsocket() {    socket = new WebSocket(uri);    socket.onopen = function () {      if (socket.readyState === socket.OPEN) {        socket.onmessage = function (message) {          message = JSON.parse(message.data);          state = [            message['data']['distanceFM'],            message['data']['distanceFL'],            message['data']['distanceFR'],          ];          updateDistance('distanceFL', message['data']);          updateDistance('distanceFR', message['data']);          updateDistance('distanceFM', message['data']);          updateTelemetry(message['data']);        };      }    };    socket.onclose = function () {      console.log('Reconnecting to websocket...');      initWebsocket();    };  }  initWebsocket();  function updateDistance(id, data) {    let distance = Math.min(data[id], 200);    let newWidth = parseInt(distance / 5);    document.getElementById(id).style.width = newWidth + '%';    document.getElementById(id).innerHTML = distance + 'cm';  }  function updateTelemetry(data) {    telemetryCount += 1;    let telemetryText = '<ul>';    data['actionCount'] = actionCount;    data['telemetryCount'] = telemetryCount;    data['loopTime'] = data['loopMs'] - loopMs;    loopMs = data['loopMs'];    let count = 0;    for (const key in data) {      telemetryText += '<li>' + key + ': ' + data[key] + '</li>';      count ++;      if (count > 2) {        telemetryText += '</ul><ul>';        count = 0;      }    }    telemetryText += '</ul>';    document.getElementById('telemetry').innerHTML = telemetryText;  }  function getProgress() {    let throttle = leftJoystick.GetY();    let turn = rightJoystick.GetX();    let left = (throttle * maxThrottle) / 100;    left = left + ((maxThrottle - left) * turn) / 100;    let right = (throttle * maxThrottle) / 100;    right = right - ((maxThrottle - right) * turn) / 100;    if (recordingOn) {      recording.push({ left: left, right: right });      document.getElementById('counter').innerHTML = recording.length;    }    if (!playbackOn) {      action = getAssistedAction(state, [left, right]);      performAction(action[0], action[1], getProgress);    }  }  function performAction(left, right, callback) {    if(socket.readyState === socket.OPEN){      socket.send(JSON.stringify({'right': right, 'left': left}));      actionCount += 1;    } else {      console.log('Waiting for socket...');    }    setTimeout(callback, 50);  }  getProgress();  function playback() {    if (playCursor >= recording.length) {      playbackOn = false;      document.getElementById('record').disabled = '';      document.getElementById('stop').disabled = '';      getProgress();      return;    }    document.getElementById('counter').innerHTML = playCursor;    left = recording[playCursor]['left'];    right = recording[playCursor]['right'];    playCursor++;    performAction(left, right, playback);  }  document.getElementById('record').addEventListener('click', function() {    document.getElementById('record').disabled = 'disabled';    document.getElementById('stop').disabled = '';    recordingOn = true;    recording = [];  });  document.getElementById('stop').addEventListener('click', function() {    document.getElementById('stop').disabled = 'disabled';    document.getElementById('record').disabled = '';    document.getElementById('play').disabled = '';    recordingOn = false;  });  document.getElementById('play').addEventListener('click', function() {    document.getElementById('record').disabled = 'disabled';    document.getElementById('stop').disabled = '';    playbackOn = true;    playCursor = 0;    playback();  });  document.getElementById('assist').addEventListener('click', function() {    assist = !assist;    if(assist) {      document.getElementById('assist').classList.remove('off');    } else {      document.getElementById('assist').classList.add('off');    }  });  document.getElementById('auto').addEventListener('click', function() {    auto = !auto;    if(auto) {      document.getElementById('auto').classList.remove('off');    } else {      document.getElementById('auto').classList.add('off');    }  });</script><script>  if(typeof tf === 'undefined') {    document.getElementById('assist').disabled = 'disabled';  } else {    tf.loadLayersModel('https://sergiuionescu.github.io/esp32-auto-car/sym/model/actor.json').then(model => {      actor = model;    });  }</script></body><head>    <meta name='viewport' content='initial-scale=1, maximum-scale=1'>    <style>      html, body {        overflow-x: hidden;      }      body {          position: relative;          font-size: 2em;      }      div.container {        max-width: 800px;        max-height: 600px;        width: 100%;        top: 0;        bottom: 0;        left: 0;        right: 0;        margin: auto;      }      div.sensors {        margin-top: 40px;      }      div.progress {        position: absolute;        margin: auto;        width: 15%;        height: 2%;        background-color: blueviolet;      }      div.control {        position: absolute;        margin: auto;        width: 80%;        height: 70%;        top: 0;        bottom: 0;        left: 0;        right: 0;      }      div.left {        width: 50%;        float: left;      }      div.right {        width: 50%;        float: left;      }      label {        position: absolute;        left: 0;        right: 0;        display: block;        margin-bottom: 10px;      }      input {        font-size: 30px;      }      .btn {        background-color: #0363c4;        border: none;        color: white;        padding: 12px 16px;        font-size: 16px;        cursor: pointer;      }      .btn:disabled {        background-color: #9a9b9b;      }      .off {          background-color: #772626;      }      .right {          float:right;      }      #telemetry {          font-size: 8px;      }      ul {          float:left;      }    </style>    <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>  </head></html>\n");
 }
 
 void handleJoystick(AsyncWebServerRequest *request) {
@@ -152,7 +163,7 @@ void handleJoystick(AsyncWebServerRequest *request) {
 
 void sendToWs() {
   String message;
-  const size_t capacity = 3*JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(13);
+  const size_t capacity = 3*JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(15);
   DynamicJsonDocument doc(capacity);
 
   JsonObject data = doc.createNestedObject("data");
@@ -174,6 +185,8 @@ void sendToWs() {
   data["magX"] = magX;
   data["magY"] = magY;
   data["magZ"] = magZ;
+  data["loopMs"] = loopMs;
+  data["loopTimeMs"] = loopTimeMs;
 
   serializeJson(doc, message);
 
@@ -188,8 +201,13 @@ void updateDistance() {
   digitalWrite(trigPinFL, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPinFL, LOW);
-  duration = pulseIn(echoPinFL, HIGH);
-  distanceFL = duration*0.034/2;
+  duration = pulseIn(echoPinFL, HIGH, pulseTimeout);
+  if(duration > 0) {
+    distanceFL = duration*0.034/2;
+  } else {
+    distanceFL = 200;
+  }
+  
 
 //  logToSerial("Sensor FR");
   digitalWrite(trigPinFR, LOW);
@@ -197,8 +215,12 @@ void updateDistance() {
   digitalWrite(trigPinFR, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPinFR, LOW);
-  duration = pulseIn(echoPinFR, HIGH);
-  distanceFR = duration*0.034/2;
+  duration = pulseIn(echoPinFR, HIGH, pulseTimeout);
+  if(duration > 0) {
+    distanceFR = duration*0.034/2;
+  } else {
+    distanceFR = 200;
+  }
 
 //  logToSerial("Sensor FM");
   digitalWrite(trigPinFM, LOW);
@@ -206,8 +228,12 @@ void updateDistance() {
   digitalWrite(trigPinFM, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPinFM, LOW);
-  duration = pulseIn(echoPinFM, HIGH);
-  distanceFM = duration*0.034/2;
+  duration = pulseIn(echoPinFM, HIGH, pulseTimeout);
+  if(duration > 0) {
+    distanceFM = duration*0.034/2;
+  } else {
+    distanceFM = 200;
+  }
 //  logToSerial("Sensors Done");
 }
 
@@ -370,7 +396,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     deserializeJson(doc, (char*)data);     
    
     motorRightReference = (int)doc["right"]; 
-    motorLeftReference = (int)doc["left"];   
+    motorLeftReference = (int)doc["left"]; 
   }
 }
 
