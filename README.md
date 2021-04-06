@@ -1,18 +1,18 @@
 # ESP32 autonomous toy car
 The project contains software for assisting a toy car navigation.
 
-# Mission plan
+## Mission plan
 
 Train a machine learning model that learns to navigate an environment and use it to control the physical device.
 
-# Training environment
+## Training environment
 Allows training and downloading the trained model.
 
 https://sergiuionescu.github.io/esp32-auto-car/sym/sym.html
 
 
-# Hardware
-#Components
+## Hardware
+###Components
 
 - Logic board: 1xESP32 (Plusivo)
 - Motor controller: 1xTB6612FNG
@@ -23,7 +23,7 @@ https://sergiuionescu.github.io/esp32-auto-car/sym/sym.html
 - 2x5V motors
 - MPU9250
 
-#Circuit connection
+###Circuit connection
 
 | ESP32 | TB6612FNG | HC-SRO4 FR | HC-SRO4 FL | HC-SRO4 FM | MPU9250 | Motor Left | Motor Right |
 |-------|------------|------------|------------|------------|---------|------------|-------------|
@@ -59,3 +59,8 @@ https://sergiuionescu.github.io/esp32-auto-car/sym/sym.html
 |       | A2         |            |            |            |         | A2         |             |
 |       | B1         |            |            |            |         |            | B1          |
 |       | B2         |            |            |            |         |            | B2          |
+
+
+## Demo video
+
+[![Demo video](https://img.youtube.com/vi/TfE0IAPvi34/0.jpg)](https://www.youtube.com/watch?v=TfE0IAPvi34)

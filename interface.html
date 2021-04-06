@@ -59,7 +59,8 @@
   let auto = false;
   let actor = false;
   function getAssistedAction(state, action) {
-    if(!auto && (!assist || state[0] > 30)) {
+    let aboveThreshold = state[0] > 30 && state[1] > 30 && state[2] > 30;
+    if(!auto && (!assist || aboveThreshold)) {
       return action;
     }
     let policy = actor.predict(tf.tensor2d(normalizer.normalizeFeatures(state), [1, state.length]), {
