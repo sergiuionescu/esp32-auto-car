@@ -1,10 +1,11 @@
+<!--START:INDEX-->
 <html>
 <body>
 <div class='container'>
   <div class='sensors'>
-    <div class='progress' id='distanceFL' style='left:0;top:0'></div>
-    <div class='progress' id='distanceFM' style='left:42.5%;top:0'></div>
-    <div class='progress' id='distanceFR' style='right:0;top:0'></div>
+    <canvas id='cnv-telemetry1' height='20px'></canvas>
+    <canvas id='cnv-telemetry2' height='20px'></canvas>
+    <canvas id='cnv-telemetry3' height='20px'></canvas>
   </div>
   <div class='toolbar'>
     <button class='btn' id='record' name='record'><i class='fa fa-circle'></i></button>
@@ -13,6 +14,7 @@
     <button class='btn off' id='assist' name='assist'><i class='fa fa-magic'></i></button>
     <button class='btn off' id='auto' name='auto'><i class='fa fa-bomb'></i></button>
 
+    <button class='btn right' id='metrics' name='metrics'><i class='fa fa-refresh'></i></button>
     <button class='btn right' id='settings' name='settings'><i class='fa fa-cogs'></i></button>
     <div id='counter'></div>
   </div>
@@ -31,15 +33,13 @@
     </div>
   </div>
 </div>
-<div id='telemetry'>
-</div>
 <script src='https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js'></script>
 <script src='https://sergiuionescu.github.io/esp32-auto-car/sym/js/chance.min.js'></script>
 <script src='joy.min.js'></script>
 <script>
   class Nomarlizer {
     normalizeSensorDistance(sensorDistance) {
-      sensorDistance = Math.round(sensorDistance/10);
+      sensorDistance = Math.round(sensorDistance / 10);
       return sensorDistance / 20;
     }
 
@@ -58,9 +58,10 @@
   let assist = false;
   let auto = false;
   let actor = false;
+
   function getAssistedAction(state, action) {
     let aboveThreshold = state[0] > 30 && state[1] > 30 && state[2] > 30;
-    if(!auto && (!assist || aboveThreshold)) {
+    if (!auto && (!assist || aboveThreshold)) {
       return action;
     }
     let policy = actor.predict(tf.tensor2d(normalizer.normalizeFeatures(state), [1, state.length]), {
@@ -97,12 +98,53 @@
   let loopMs = 0;
   let state = [200, 200, 200];
 
+  let telemetryProfiles = [
+    [
+      'distanceFL',
+      'distanceFM',
+      'distanceFR',
+    ],
+    [
+      'accelX',
+      'accelY',
+      'accelZ',
+    ],
+    [
+      'gyroX',
+      'gyroY',
+      'gyroZ',
+    ],
+    [
+      'magX',
+      'magY',
+      'magZ',
+    ]
+  ];
+  const telemetryConstants = {
+    'distanceFL': {'max': 200, 'unit': ' cm'},
+    'distanceFM': {'max': 200, 'unit': ' cm'},
+    'distanceFR': {'max': 200, 'unit': ' cm'},
+    'accelX': {'max': 200, 'unit': ' m/ss'},
+    'accelY': {'max': 200, 'unit': ' m/ss'},
+    'accelZ': {'max': 200, 'unit': ' m/ss'},
+    'gyroX': {'max': 2, 'unit': ' rad/s'},
+    'gyroY': {'max': 2, 'unit': ' rad/s'},
+    'gyroZ': {'max': 2, 'unit': ' rad/s'},
+    'magX': {'max': 70, 'unit': ' uT'},
+    'magY': {'max': 70, 'unit': ' uT'},
+    'magZ': {'max': 70, 'unit': ' uT'}
+  };
+  let telemetryIndex = 0;
+  let telemetryHistory = {};
+  let labelReserved = 50;
+
 
   let hostname = location.hostname;
   let uri = 'ws://' + hostname + '/ws';
-  if(hostname === 'localhost') {
+  if (hostname === 'localhost') {
     uri = 'ws://' + hostname + ':8000';
   }
+
   function initWebsocket() {
     socket = new WebSocket(uri);
     socket.onopen = function () {
@@ -114,9 +156,6 @@
             message['data']['distanceFL'],
             message['data']['distanceFR'],
           ];
-          updateDistance('distanceFL', message['data']);
-          updateDistance('distanceFR', message['data']);
-          updateDistance('distanceFM', message['data']);
           updateTelemetry(message['data']);
         };
       }
@@ -126,17 +165,10 @@
       initWebsocket();
     };
   }
-  initWebsocket();
 
-  function updateDistance(id, data) {
-    let distance = Math.min(data[id], 200);
-    let newWidth = parseInt(distance / 5);
-    document.getElementById(id).style.width = newWidth + '%';
-    document.getElementById(id).innerHTML = distance + 'cm';
-  }
+  initWebsocket();
   function updateTelemetry(data) {
     telemetryCount += 1;
-    let telemetryText = '<ul>';
     data['actionCount'] = actionCount;
     data['telemetryCount'] = telemetryCount;
 
@@ -144,16 +176,44 @@
     loopMs = data['loopMs'];
     let count = 0;
     for (const key in data) {
-      telemetryText += '<li>' + key + ': ' + data[key] + '</li>';
-      count ++;
-      if (count > 2) {
-        telemetryText += '</ul><ul>';
-        count = 0;
+      let value = data[key];
+      if (key in telemetryConstants) {
+        let max = telemetryConstants[key].max;
+        let y = value / max * 20;
+        if (key in telemetryHistory) {
+          telemetryHistory[key].push(y);
+          if (telemetryHistory[key].length > window.innerWidth * 0.30 - labelReserved) {
+            telemetryHistory[key].shift();
+          }
+        } else {
+          telemetryHistory[key] = [y];
+        }
+      }
+
+
+      if (telemetryProfiles[telemetryIndex].includes(key) ) {
+        count++;
+
+        let canvas = document.getElementById('cnv-telemetry' + count);
+        let context = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth * 0.30;
+        canvas.width = canvas.width;
+        for (const x in telemetryHistory[key]) {
+          context.beginPath();
+          context.fillStyle = 'gray';
+          let height = telemetryHistory[key][x];
+          context.fillRect(parseInt(x) + labelReserved, canvas.height, 1, -height);
+          context.fill();
+        }
+        context.font = '10px serif';
+        context.strokeStyle = 'blue';
+        context.strokeText(key, 0, 10);
+        context.strokeText(value + '' + telemetryConstants[key].unit, 0, canvas.height);
       }
     }
-    telemetryText += '</ul>';
-    document.getElementById('telemetry').innerHTML = telemetryText;
   }
+
   function getProgress() {
     let throttle = leftJoystick.GetY();
     let turn = rightJoystick.GetX();
@@ -162,7 +222,7 @@
     let right = (throttle * maxThrottle) / 100;
     right = right - ((maxThrottle - right) * turn) / 100;
     if (recordingOn) {
-      recording.push({ left: left, right: right });
+      recording.push({left: left, right: right});
       document.getElementById('counter').innerHTML = recording.length;
     }
     if (!playbackOn) {
@@ -170,8 +230,9 @@
       performAction(action[0], action[1], getProgress);
     }
   }
+
   function performAction(left, right, callback) {
-    if(socket.readyState === socket.OPEN){
+    if (socket.readyState === socket.OPEN) {
       socket.send(JSON.stringify({'right': right, 'left': left}));
       actionCount += 1;
     } else {
@@ -179,7 +240,9 @@
     }
     setTimeout(callback, 50);
   }
+
   getProgress();
+
   function playback() {
     if (playCursor >= recording.length) {
       playbackOn = false;
@@ -194,44 +257,51 @@
     playCursor++;
     performAction(left, right, playback);
   }
-  document.getElementById('record').addEventListener('click', function() {
+
+  document.getElementById('record').addEventListener('click', function () {
     document.getElementById('record').disabled = 'disabled';
     document.getElementById('stop').disabled = '';
     recordingOn = true;
     recording = [];
   });
-  document.getElementById('stop').addEventListener('click', function() {
+  document.getElementById('stop').addEventListener('click', function () {
     document.getElementById('stop').disabled = 'disabled';
     document.getElementById('record').disabled = '';
     document.getElementById('play').disabled = '';
     recordingOn = false;
   });
-  document.getElementById('play').addEventListener('click', function() {
+  document.getElementById('play').addEventListener('click', function () {
     document.getElementById('record').disabled = 'disabled';
     document.getElementById('stop').disabled = '';
     playbackOn = true;
     playCursor = 0;
     playback();
   });
-  document.getElementById('assist').addEventListener('click', function() {
+  document.getElementById('assist').addEventListener('click', function () {
     assist = !assist;
-    if(assist) {
+    if (assist) {
       document.getElementById('assist').classList.remove('off');
     } else {
       document.getElementById('assist').classList.add('off');
     }
   });
-  document.getElementById('auto').addEventListener('click', function() {
+  document.getElementById('auto').addEventListener('click', function () {
     auto = !auto;
-    if(auto) {
+    if (auto) {
       document.getElementById('auto').classList.remove('off');
     } else {
       document.getElementById('auto').classList.add('off');
     }
   });
+  document.getElementById('metrics').addEventListener('click', function () {
+    telemetryIndex++;
+    if (telemetryIndex >= telemetryProfiles.length) {
+      telemetryIndex = 0;
+    }
+  });
 </script>
 <script>
-  if(typeof tf === 'undefined') {
+  if (typeof tf === 'undefined') {
     document.getElementById('assist').disabled = 'disabled';
   } else {
     tf.loadLayersModel('https://sergiuionescu.github.io/esp32-auto-car/sym/model/actor.json').then(model => {
@@ -241,87 +311,81 @@
 </script>
 </body>
 <head>
-    <meta name='viewport' content='initial-scale=1, maximum-scale=1'>
-    <style>
+  <meta name='viewport' content='initial-scale=1, maximum-scale=1'>
+  <style>
       html, body {
-        overflow-x: hidden;
+          overflow-x: hidden;
       }
+
       body {
           position: relative;
           font-size: 2em;
       }
+
       div.container {
-        max-width: 800px;
-        max-height: 600px;
-        width: 100%;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        margin: auto;
+          max-width: 800px;
+          max-height: 600px;
+          width: 100%;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          margin: auto;
       }
+
       div.sensors {
-        margin-top: 40px;
+          height: 30px;
       }
-      div.progress {
-        position: absolute;
-        margin: auto;
-        width: 15%;
-        height: 2%;
-        background-color: blueviolet;
-      }
-      div.control {
-        position: absolute;
-        margin: auto;
-        width: 80%;
-        height: 70%;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        right: 0;
-      }
+
       div.left {
-        width: 50%;
-        float: left;
+          width: 50%;
+          float: left;
       }
+
       div.right {
-        width: 50%;
-        float: left;
+          width: 50%;
+          float: left;
       }
+
       label {
-        position: absolute;
-        left: 0;
-        right: 0;
-        display: block;
-        margin-bottom: 10px;
+          position: absolute;
+          left: 0;
+          right: 0;
+          display: block;
+          margin-bottom: 10px;
       }
+
       input {
-        font-size: 30px;
+          font-size: 30px;
       }
+
       .btn {
-        background-color: #0363c4;
-        border: none;
-        color: white;
-        padding: 12px 16px;
-        font-size: 16px;
-        cursor: pointer;
+          background-color: #0363c4;
+          border: none;
+          color: white;
+          padding: 12px 16px;
+          font-size: 16px;
+          cursor: pointer;
       }
+
       .btn:disabled {
-        background-color: #9a9b9b;
+          background-color: #9a9b9b;
       }
+
       .off {
           background-color: #772626;
       }
+
       .right {
-          float:right;
+          float: right;
       }
-      #telemetry {
-          font-size: 8px;
-      }
+
       ul {
-          float:left;
+          float: left;
       }
-    </style>
-    <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>
-  </head>
+
+  </style>
+  <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>
+</head>
 </html>
+<!--END:INDEX-->
