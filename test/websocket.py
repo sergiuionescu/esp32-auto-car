@@ -22,15 +22,18 @@ class SimpleEcho(WebSocket):
                 'distanceFM': random.randint(0, 200),
                 'distanceFR': random.randint(0, 200),
                 'loopMs': round(now - self.timer),
-                'accelX': random.randint(0, 200),
-                'accelY': random.randint(0, 200),
-                'accelZ': random.randint(0, 200),
-                'gyroX': random.randint(0, 200)/100,
-                'gyroY': random.randint(0, 200)/100,
-                'gyroZ': random.randint(0, 200)/100,
+                'accelX': random.randint(0, 100) - 50,
+                'accelY': random.randint(0, 100) - 50,
+                'accelZ': random.randint(0, 100) - 50,
+                'gyroX': random.randint(0, 400)/100 - 2,
+                'gyroY': random.randint(0, 400)/100 - 2,
+                'gyroZ': random.randint(0, 400)/100 - 2,
                 'magX': random.randint(20, 70),
                 'magY': random.randint(20, 70),
-                'magZ': random.randint(20, 70)
+                'magZ': random.randint(20, 70),
+                'distTimeMs': random.randint(20, 200),
+                'pwmTimeMs': random.randint(20, 200),
+                'mpuTimeMs': random.randint(20, 200)
             }
         }
 

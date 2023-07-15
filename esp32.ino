@@ -5,6 +5,7 @@
 #include "Wire.h"
 #include "MPU9250.h"
 #include "MadgwickAHRS.h"
+#include "SPIFFS.h"
 
 #ifndef max
 #define max(a,b) (((a) > (b)) ? (a) : (b))
@@ -78,14 +79,22 @@ float magZ;
 
 float heading, yaw, pitch, roll;
 
-unsigned long loopMs; 
+unsigned long loopMs;
 unsigned long loopTimeMs;
+unsigned long distanceTimeMs;
+unsigned long pwmTimeMs;
+unsigned long mpuTimeMs;
 
 void setup() {
   Serial.begin(115200);
 
   logToSerial("Starting…");
   connectOrAp();
+
+  if(!SPIFFS.begin(true)){
+    Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
 
   pinMode(onBoardLed, OUTPUT);
 
@@ -118,9 +127,15 @@ void setup() {
   ledcSetup(pwmChannelRight, freq, resolution);
   ledcAttachPin(motorRight.pwm, pwmChannelRight);
   ledcAttachPin(motorLeft.pwm, pwmChannelLeft);
-  
+
   server.on("/", HTTP_GET, handleIndex);
   server.on("/joy.min.js", handleJoystick);
+  server.on("/actor.json", handleActor);
+  server.on("/actor.weights.bin", handleActorWeights);
+  server.on("/chance.min.js", handleChance);
+  server.on("/font-awesome.min.css", handleFont);
+  server.on("/fonts/fontawesome-webfont.woff2", handleFontWoff);
+  server.on("/tf.2.0.1.min.js", handleTf);
 
   server.on("/login", handleLogin);
   server.on("/scan", handleScan);
@@ -128,7 +143,7 @@ void setup() {
 
   ws.onEvent(onEvent);
   server.addHandler(&ws);
-  
+
   server.begin();
 
 //  Serial.println("calibrate MPU accelerometer");
@@ -148,7 +163,7 @@ void setup() {
   MadgwickFilter.begin(111); // Hz
 
   logToSerial("Setup done");
-  
+
   digitalWrite(onBoardLed,HIGH);
   delay(500);
   digitalWrite(onBoardLed,LOW);
@@ -160,34 +175,63 @@ void setup() {
 
 void loop() {
   delay(5);
-  unsigned long currentTimeMs = millis();
+  unsigned long loopStartTimeMs = millis();
+  unsigned long carrierTimeMs = millis();
   if(loopMs > 0) {
-    loopTimeMs = currentTimeMs - loopMs;
-  } 
-  loopMs = currentTimeMs;
-  
-  updateDistance();  
+    loopTimeMs = loopStartTimeMs - loopMs;
+  }
+  loopMs = loopStartTimeMs;
+
+  updateDistance();
+  distanceTimeMs = millis() -  carrierTimeMs;
+  carrierTimeMs = millis();
   updatePWM();
+  pwmTimeMs = millis() -  carrierTimeMs;
+  carrierTimeMs = millis();
   readMPU();
+  mpuTimeMs = millis() -  carrierTimeMs;
   sendToWs();
 }
 
-
 void handleIndex(AsyncWebServerRequest *request) {
-  request->send(200, "text/html", "<!--START:INDEX--><html><body><div class='container'>  <div class='sensors'>    <canvas id='cnv-telemetry1' height='20px'></canvas>    <canvas id='cnv-telemetry2' height='20px'></canvas>    <canvas id='cnv-telemetry3' height='20px'></canvas>  </div>  <div class='toolbar'>    <button class='btn' id='record' name='record'><i class='fa fa-circle'></i></button>    <button class='btn' id='stop' name='stop' disabled='disabled'><i class='fa fa-stop'></i></button>    <button class='btn' id='play' name='play' disabled='disabled'><i class='fa fa-play'></i></button>    <button class='btn off' id='assist' name='assist'><i class='fa fa-magic'></i></button>    <button class='btn off' id='auto' name='auto'><i class='fa fa-bomb'></i></button>    <button class='btn right' id='metrics' name='metrics'><i class='fa fa-refresh'></i></button>    <button class='btn right' id='settings' name='settings'><i class='fa fa-cogs'></i></button>    <div id='counter'></div>  </div>  <div>    <div class='left'>      <div          id='left_joystick'          style='width:200px;height:200px;margin-right:50px;margin-left:50px'      ></div>    </div>    <div class='right'>      <div          id='right_joystick'          style='width:200px;height:200px;margin-right:50px;margin-left:50px'      ></div>    </div>  </div></div><script src='https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js'></script><script src='https://sergiuionescu.github.io/esp32-auto-car/sym/js/chance.min.js'></script><script src='joy.min.js'></script><script>  class Nomarlizer {    normalizeSensorDistance(sensorDistance) {      sensorDistance = Math.round(sensorDistance / 10);      return sensorDistance / 20;    }    normalizeFeatures(features) {      return [        this.normalizeSensorDistance(features[0]),        this.normalizeSensorDistance(features[1]),        this.normalizeSensorDistance(features[2]),      ];    }  }  normalizer = new Nomarlizer();</script><script>  let assist = false;  let auto = false;  let actor = false;  function getAssistedAction(state, action) {    let aboveThreshold = state[0] > 30 && state[1] > 30 && state[2] > 30;    if (!auto && (!assist || aboveThreshold)) {      return action;    }    let policy = actor.predict(tf.tensor2d(normalizer.normalizeFeatures(state), [1, state.length]), {      batchSize: 1,    });    let policyFlat = policy.dataSync();    action = chance.weighted([0, 1, 2], policyFlat);    console.log(state, action);    switch (action) {      case 0:        return [200, 200];      case 1:        return [255, -255];      case 2:        return [-255, 255];    }    return action;  }</script><script>  let leftJoystick = new JoyStick('left_joystick');  let rightJoystick = new JoyStick('right_joystick');  let maxThrottle = 220;  let recordingOn = false;  let recording = [];  let playCursor = 0;  let playbackOn = false;  let socket = null;  let telemetryCount = 0;  let actionCount = 0;  let loopMs = 0;  let state = [200, 200, 200];  let telemetryProfiles = [    [      'distanceFL',      'distanceFM',      'distanceFR',    ],    [      'accelX',      'accelY',      'accelZ',    ],    [      'gyroX',      'gyroY',      'gyroZ',    ],    [      'magX',      'magY',      'magZ',    ]  ];  const telemetryConstants = {    'distanceFL': {'max': 200, 'unit': ' cm'},    'distanceFM': {'max': 200, 'unit': ' cm'},    'distanceFR': {'max': 200, 'unit': ' cm'},    'accelX': {'max': 200, 'unit': ' m/ss'},    'accelY': {'max': 200, 'unit': ' m/ss'},    'accelZ': {'max': 200, 'unit': ' m/ss'},    'gyroX': {'max': 2, 'unit': ' rad/s'},    'gyroY': {'max': 2, 'unit': ' rad/s'},    'gyroZ': {'max': 2, 'unit': ' rad/s'},    'magX': {'max': 70, 'unit': ' uT'},    'magY': {'max': 70, 'unit': ' uT'},    'magZ': {'max': 70, 'unit': ' uT'}  };  let telemetryIndex = 0;  let telemetryHistory = {};  let labelReserved = 50;  let hostname = location.hostname;  let uri = 'ws://' + hostname + '/ws';  if (hostname === 'localhost') {    uri = 'ws://' + hostname + ':8000';  }  function initWebsocket() {    socket = new WebSocket(uri);    socket.onopen = function () {      if (socket.readyState === socket.OPEN) {        socket.onmessage = function (message) {          message = JSON.parse(message.data);          state = [            message['data']['distanceFM'],            message['data']['distanceFL'],            message['data']['distanceFR'],          ];          updateTelemetry(message['data']);        };      }    };    socket.onclose = function () {      console.log('Reconnecting to websocket...');      initWebsocket();    };  }  initWebsocket();  function updateTelemetry(data) {    telemetryCount += 1;    data['actionCount'] = actionCount;    data['telemetryCount'] = telemetryCount;    data['loopTime'] = data['loopMs'] - loopMs;    loopMs = data['loopMs'];    let count = 0;    for (const key in data) {      let value = data[key];      if (key in telemetryConstants) {        let max = telemetryConstants[key].max;        let y = value / max * 20;        if (key in telemetryHistory) {          telemetryHistory[key].push(y);          if (telemetryHistory[key].length > window.innerWidth * 0.30 - labelReserved) {            telemetryHistory[key].shift();          }        } else {          telemetryHistory[key] = [y];        }      }      if (telemetryProfiles[telemetryIndex].includes(key) ) {        count++;        let canvas = document.getElementById('cnv-telemetry' + count);        let context = canvas.getContext('2d');        canvas.width = window.innerWidth * 0.30;        canvas.width = canvas.width;        for (const x in telemetryHistory[key]) {          context.beginPath();          context.fillStyle = 'gray';          let height = telemetryHistory[key][x];          context.fillRect(parseInt(x) + labelReserved, canvas.height, 1, -height);          context.fill();        }        context.font = '10px serif';        context.strokeStyle = 'blue';        context.strokeText(key, 0, 10);        context.strokeText(value + '' + telemetryConstants[key].unit, 0, canvas.height);      }    }  }  function getProgress() {    let throttle = leftJoystick.GetY();    let turn = rightJoystick.GetX();    let left = (throttle * maxThrottle) / 100;    left = left + ((maxThrottle - left) * turn) / 100;    let right = (throttle * maxThrottle) / 100;    right = right - ((maxThrottle - right) * turn) / 100;    if (recordingOn) {      recording.push({left: left, right: right});      document.getElementById('counter').innerHTML = recording.length;    }    if (!playbackOn) {      action = getAssistedAction(state, [left, right]);      performAction(action[0], action[1], getProgress);    }  }  function performAction(left, right, callback) {    if (socket.readyState === socket.OPEN) {      socket.send(JSON.stringify({'right': right, 'left': left}));      actionCount += 1;    } else {      console.log('Waiting for socket...');    }    setTimeout(callback, 50);  }  getProgress();  function playback() {    if (playCursor >= recording.length) {      playbackOn = false;      document.getElementById('record').disabled = '';      document.getElementById('stop').disabled = '';      getProgress();      return;    }    document.getElementById('counter').innerHTML = playCursor;    left = recording[playCursor]['left'];    right = recording[playCursor]['right'];    playCursor++;    performAction(left, right, playback);  }  document.getElementById('record').addEventListener('click', function () {    document.getElementById('record').disabled = 'disabled';    document.getElementById('stop').disabled = '';    recordingOn = true;    recording = [];  });  document.getElementById('stop').addEventListener('click', function () {    document.getElementById('stop').disabled = 'disabled';    document.getElementById('record').disabled = '';    document.getElementById('play').disabled = '';    recordingOn = false;  });  document.getElementById('play').addEventListener('click', function () {    document.getElementById('record').disabled = 'disabled';    document.getElementById('stop').disabled = '';    playbackOn = true;    playCursor = 0;    playback();  });  document.getElementById('assist').addEventListener('click', function () {    assist = !assist;    if (assist) {      document.getElementById('assist').classList.remove('off');    } else {      document.getElementById('assist').classList.add('off');    }  });  document.getElementById('auto').addEventListener('click', function () {    auto = !auto;    if (auto) {      document.getElementById('auto').classList.remove('off');    } else {      document.getElementById('auto').classList.add('off');    }  });  document.getElementById('metrics').addEventListener('click', function () {    telemetryIndex++;    if (telemetryIndex >= telemetryProfiles.length) {      telemetryIndex = 0;    }  });</script><script>  if (typeof tf === 'undefined') {    document.getElementById('assist').disabled = 'disabled';  } else {    tf.loadLayersModel('https://sergiuionescu.github.io/esp32-auto-car/sym/model/actor.json').then(model => {      actor = model;    });  }</script></body><head>  <meta name='viewport' content='initial-scale=1, maximum-scale=1'>  <style>      html, body {          overflow-x: hidden;      }      body {          position: relative;          font-size: 2em;      }      div.container {          max-width: 800px;          max-height: 600px;          width: 100%;          top: 0;          bottom: 0;          left: 0;          right: 0;          margin: auto;      }      div.sensors {          height: 30px;      }      div.left {          width: 50%;          float: left;      }      div.right {          width: 50%;          float: left;      }      label {          position: absolute;          left: 0;          right: 0;          display: block;          margin-bottom: 10px;      }      input {          font-size: 30px;      }      .btn {          background-color: #0363c4;          border: none;          color: white;          padding: 12px 16px;          font-size: 16px;          cursor: pointer;      }      .btn:disabled {          background-color: #9a9b9b;      }      .off {          background-color: #772626;      }      .right {          float: right;      }      ul {          float: left;      }  </style>  <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'></head></html><!--END:INDEX-->\n");
+  request->send(SPIFFS, "/index.html");
 }
 
 void handleJoystick(AsyncWebServerRequest *request) {
-  request->send(200, "text/html", "var JoyStick=function(t,e){var i=void 0===(e=e||{}).title?'joystick':e.title,n=void 0===e.width?0:e.width,o=void 0===e.height?0:e.height,r=void 0===e.internalFillColor?'#00AA00':e.internalFillColor,h=void 0===e.internalLineWidth?2:e.internalLineWidth,d=void 0===e.internalStrokeColor?'#003300':e.internalStrokeColor,a=void 0===e.externalLineWidth?2:e.externalLineWidth,l=void 0===e.externalStrokeColor?'#008000':e.externalStrokeColor,c=void 0===e.autoReturnToCenter||e.autoReturnToCenter,u=document.getElementById(t),s=document.createElement('canvas');s.id=i,0===n&&(n=u.clientWidth),0===o&&(o=u.clientHeight),s.width=n,s.height=o,u.appendChild(s);var f=s.getContext('2d'),g=0,v=2*Math.PI,w=(s.width-(s.width/2+10))/2,C=w+5,m=w+30,p=s.width/2,L=s.height/2,E=s.width/10,S=-1*E,k=s.height/10,W=-1*k,G=p,x=L;function R(){f.beginPath(),f.arc(p,L,m,0,v,!1),f.lineWidth=a,f.strokeStyle=l,f.stroke()}function T(){f.beginPath(),G<w&&(G=C),G+w>s.width&&(G=s.width-C),x<w&&(x=C),x+w>s.height&&(x=s.height-C),f.arc(G,x,w,0,v,!1);var t=f.createRadialGradient(p,L,5,p,L,200);t.addColorStop(0,r),t.addColorStop(1,d),f.fillStyle=t,f.fill(),f.lineWidth=h,f.strokeStyle=d,f.stroke()}'ontouchstart'in document.documentElement?(s.addEventListener('touchstart',function(t){g=1},!1),s.addEventListener('touchmove',function(t){t.preventDefault(),1===g&&t.targetTouches[0].target===s&&(G=t.targetTouches[0].pageX,x=t.targetTouches[0].pageY,G-=s.offsetLeft,x-=s.offsetTop,f.clearRect(0,0,s.width,s.height),R(),T())},!1),s.addEventListener('touchend',function(t){g=0,c&&(G=p,x=L);f.clearRect(0,0,s.width,s.height),R(),T()},!1)):(s.addEventListener('mousedown',function(t){g=1},!1),s.addEventListener('mousemove',function(t){1===g&&(G=t.pageX,x=t.pageY,G-=s.offsetLeft,x-=s.offsetTop,f.clearRect(0,0,s.width,s.height),R(),T())},!1),s.addEventListener('mouseup',function(t){g=0,c&&(G=p,x=L);f.clearRect(0,0,s.width,s.height),R(),T()},!1)),R(),T(),this.GetWidth=function(){return s.width},this.GetHeight=function(){return s.height},this.GetPosX=function(){return G},this.GetPosY=function(){return x},this.GetX=function(){return((G-p)/C*100).toFixed()},this.GetY=function(){return((x-L)/C*100*-1).toFixed()},this.GetDir=function(){var t='',e=G-p,i=x-L;return i>=W&&i<=k&&(t='C'),i<W&&(t='N'),i>k&&(t='S'),e<S&&('C'===t?t='W':t+='W'),e>E&&('C'===t?t='E':t+='E'),t}};\n");
+  request->send(SPIFFS, "/joy.min.js");
+}
+
+void handleActor(AsyncWebServerRequest *request) {
+  request->send(SPIFFS, "/actor.json");
+}
+
+void handleActorWeights(AsyncWebServerRequest *request) {
+  request->send(SPIFFS, "/actor.weights.bin");
+}
+
+void handleFont(AsyncWebServerRequest *request) {
+  request->send(SPIFFS, "/font-awesome.min.css");
+}
+
+void handleFontWoff(AsyncWebServerRequest *request) {
+  request->send(SPIFFS, "/fontawesome-webfont.woff2");
+}
+
+void handleChance(AsyncWebServerRequest *request) {
+  request->send(SPIFFS, "/chance.min.js");
+}
+
+void handleTf(AsyncWebServerRequest *request) {
+  request->send(SPIFFS, "/tf.2.0.1.min.js");
 }
 
 void sendToWs() {
   String message;
-  const size_t capacity = 3*JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(19);
+  const size_t capacity = 3*JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(23);
   DynamicJsonDocument doc(capacity);
 
   JsonObject data = doc.createNestedObject("data");
-  
+
   JsonObject data_motors = data.createNestedObject("motors");
   JsonObject data_motors_left = data_motors.createNestedObject("left");
   data_motors_left["value"] = motorLeft.value;
@@ -211,6 +255,10 @@ void sendToWs() {
   data["yaw"] = yaw;
   data["roll"] = roll;
   data["pitch"] = pitch;
+  data["distTimeMs"] = distanceTimeMs;
+  data["pwmTimeMs"] = pwmTimeMs;
+  data["mpuTimeMs"] = mpuTimeMs;
+  data["signalStrength"] = WiFi.RSSI();
 
   serializeJson(doc, message);
 
@@ -231,7 +279,7 @@ void updateDistance() {
   } else {
     distanceFL = 200;
   }
-  
+
 
 //  logToSerial("Sensor FR");
   digitalWrite(trigPinFR, LOW);
@@ -270,7 +318,7 @@ void updatePWM(){
     if(distanceFL <= 30 || distanceFM <= 30 || distanceFR <= 30) {
       distanceThreshold = true;
     }
-    
+
     if(motorRight.value > 0 && motorLeft.value > 0 && distanceThreshold) {
       avoidAtAllCost = true;
     }
@@ -290,15 +338,15 @@ void updatePWM(){
         motorRight.value = 220;
         motorLeft.value = -220;
       }
-    } 
-    
+    }
+
     //Channel 1
     if(motorRight.value < 0){
         digitalWrite(motorRight.en1, LOW);
         digitalWrite(motorRight.en2, HIGH);
     }else{
         digitalWrite(motorRight.en1, HIGH);
-        digitalWrite(motorRight.en2, LOW);  
+        digitalWrite(motorRight.en2, LOW);
     }
     ledcWrite(pwmChannelRight, abs(motorRight.value));
 
@@ -308,7 +356,7 @@ void updatePWM(){
         digitalWrite(motorLeft.en2, HIGH);
     }else{
         digitalWrite(motorLeft.en1, HIGH);
-        digitalWrite(motorLeft.en2, LOW); 
+        digitalWrite(motorLeft.en2, LOW);
     }
     ledcWrite(pwmChannelLeft, abs(motorLeft.value));
 }
@@ -325,17 +373,17 @@ void handleScan(AsyncWebServerRequest *request) {
 
   const size_t capacity = JSON_ARRAY_SIZE(n) + n * JSON_OBJECT_SIZE(3);
   DynamicJsonDocument doc(capacity);
-  
+
   for (int i = 0; i < n; ++i) {
     JsonObject wifi = doc.createNestedObject();
     wifi["ssid"] = WiFi.SSID(i);
     wifi["rssi"] = 100 + WiFi.RSSI(i);
     wifi["isOpen"] = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "1" : "0";
   }
-  
+
   serializeJson(doc, responseText);
   response->print(responseText);
-  
+
   request->send(response);
 }
 
@@ -361,29 +409,29 @@ void handleConnect(AsyncWebServerRequest *request) {
     delay(500);
     logToSerial("Connecting to WiFi..");
   }
- 
+
   logToSerial("Connected to the WiFi network");
   logToSerial(WiFi.localIP().toString());
 }
 
 void connectOrAp() {
   WiFi.begin();
-  for(int i=0;i<10;i++){
-     if(WiFi.status() == WL_CONNECTED) {
-      delay(100);
-      break;
-    }
-    delay(500);
-    logToSerial("Connecting to previous WiFi..");
-  }
+//  for(int i=0;i<10;i++){
+//     if(WiFi.status() == WL_CONNECTED) {
+//      delay(100);
+//      break;
+//    }
+//    delay(500);
+//    logToSerial("Connecting to previous WiFi..");
+//  }
 
   if(WiFi.status() != WL_CONNECTED) {
     WiFi.mode(WIFI_AP);
     WiFi.disconnect();
     delay(100);
-    
+
     logToSerial("Setting AP (Access Point)…");
-  
+
     WiFi.softAP(ssid, password);
     logToSerial("Wait 100 ms for AP_START...");
     delay(100);
@@ -417,10 +465,10 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     data[len] = 0;
     StaticJsonDocument<200> doc;
-    deserializeJson(doc, (char*)data);     
-   
-    motorRightReference = (int)doc["right"]; 
-    motorLeftReference = (int)doc["left"]; 
+    deserializeJson(doc, (char*)data);
+
+    motorRightReference = (int)doc["right"];
+    motorLeftReference = (int)doc["left"];
   }
 }
 
@@ -459,4 +507,3 @@ void logToSerial(const String message) {
   Serial.printf("%lld::", esp_timer_get_time());
   Serial.println(message);
 }
-  

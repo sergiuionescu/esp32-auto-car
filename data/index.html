@@ -33,8 +33,8 @@
     </div>
   </div>
 </div>
-<script src='https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js'></script>
-<script src='https://sergiuionescu.github.io/esp32-auto-car/sym/js/chance.min.js'></script>
+<script src='tf.2.0.1.min.js'></script>
+<script src='chance.min.js'></script>
 <script src='joy.min.js'></script>
 <script>
   class Nomarlizer {
@@ -118,21 +118,29 @@
       'magX',
       'magY',
       'magZ',
+    ],
+    [
+      'distTimeMs',
+      'pwmTimeMs',
+      'mpuTimeMs',
     ]
   ];
   const telemetryConstants = {
-    'distanceFL': {'max': 200, 'unit': ' cm'},
-    'distanceFM': {'max': 200, 'unit': ' cm'},
-    'distanceFR': {'max': 200, 'unit': ' cm'},
-    'accelX': {'max': 200, 'unit': ' m/ss'},
-    'accelY': {'max': 200, 'unit': ' m/ss'},
-    'accelZ': {'max': 200, 'unit': ' m/ss'},
-    'gyroX': {'max': 2, 'unit': ' rad/s'},
-    'gyroY': {'max': 2, 'unit': ' rad/s'},
-    'gyroZ': {'max': 2, 'unit': ' rad/s'},
-    'magX': {'max': 70, 'unit': ' uT'},
-    'magY': {'max': 70, 'unit': ' uT'},
-    'magZ': {'max': 70, 'unit': ' uT'}
+    'distanceFL': {'min': 0, 'max': 200, 'unit': ' cm'},
+    'distanceFM': {'min': 0, 'max': 200, 'unit': ' cm'},
+    'distanceFR': {'min': 0, 'max': 200, 'unit': ' cm'},
+    'accelX': {'min': -50, 'max': 50, 'unit': ' m/ss'},
+    'accelY': {'min': -50, 'max': 50, 'unit': ' m/ss'},
+    'accelZ': {'min': -50, 'max': 50, 'unit': ' m/ss'},
+    'gyroX': {'min': -2, 'max': 2, 'unit': ' rad/s'},
+    'gyroY': {'min': -2, 'max': 2, 'unit': ' rad/s'},
+    'gyroZ': {'min': -2, 'max': 2, 'unit': ' rad/s'},
+    'magX': {'min': 0, 'max': 70, 'unit': ' uT'},
+    'magY': {'min': 0, 'max': 70, 'unit': ' uT'},
+    'magZ': {'min': 0, 'max': 70, 'unit': ' uT'},
+    'distTimeMs': {'min': 0, 'max': 200, 'unit': ' ms'},
+    'pwmTimeMs': {'min': 0, 'max': 200, 'unit': ' ms'},
+    'mpuTimeMs': {'min': 0, 'max': 200, 'unit': ' ms'}
   };
   let telemetryIndex = 0;
   let telemetryHistory = {};
@@ -178,15 +186,13 @@
     for (const key in data) {
       let value = data[key];
       if (key in telemetryConstants) {
-        let max = telemetryConstants[key].max;
-        let y = value / max * 20;
         if (key in telemetryHistory) {
-          telemetryHistory[key].push(y);
+          telemetryHistory[key].push(value);
           if (telemetryHistory[key].length > window.innerWidth * 0.30 - labelReserved) {
             telemetryHistory[key].shift();
           }
         } else {
-          telemetryHistory[key] = [y];
+          telemetryHistory[key] = [value];
         }
       }
 
@@ -202,8 +208,11 @@
         for (const x in telemetryHistory[key]) {
           context.beginPath();
           context.fillStyle = 'gray';
-          let height = telemetryHistory[key][x];
-          context.fillRect(parseInt(x) + labelReserved, canvas.height, 1, -height);
+          let max = telemetryConstants[key].max;
+          let min = telemetryConstants[key].min;
+          let height = telemetryHistory[key][x]/max * 20;
+          let start = canvas.height + min/(max-min)*20;
+          context.fillRect(parseInt(x) + labelReserved, start, 1, -height);
           context.fill();
         }
         context.font = '10px serif';
@@ -304,7 +313,7 @@
   if (typeof tf === 'undefined') {
     document.getElementById('assist').disabled = 'disabled';
   } else {
-    tf.loadLayersModel('https://sergiuionescu.github.io/esp32-auto-car/sym/model/actor.json').then(model => {
+    tf.loadLayersModel('actor.json').then(model => {
       actor = model;
     });
   }
@@ -385,7 +394,7 @@
       }
 
   </style>
-  <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>
+  <link rel='stylesheet' href='font-awesome.min.css'>
 </head>
 </html>
 <!--END:INDEX-->
