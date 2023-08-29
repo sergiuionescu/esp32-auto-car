@@ -175,6 +175,7 @@
   }
 
   initWebsocket();
+
   function updateTelemetry(data) {
     telemetryCount += 1;
     data['actionCount'] = actionCount;
@@ -197,7 +198,7 @@
       }
 
 
-      if (telemetryProfiles[telemetryIndex].includes(key) ) {
+      if (telemetryProfiles[telemetryIndex].includes(key)) {
         count++;
 
         let canvas = document.getElementById('cnv-telemetry' + count);
@@ -210,8 +211,8 @@
           context.fillStyle = 'gray';
           let max = telemetryConstants[key].max;
           let min = telemetryConstants[key].min;
-          let height = telemetryHistory[key][x]/max * 20;
-          let start = canvas.height + min/(max-min)*20;
+          let height = telemetryHistory[key][x] / max * 20;
+          let start = canvas.height + min / (max - min) * 20;
           context.fillRect(parseInt(x) + labelReserved, start, 1, -height);
           context.fill();
         }

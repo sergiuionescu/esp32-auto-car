@@ -17,6 +17,10 @@
       .btn:disabled {
           background-color: #9a9b9b;
       }
+
+      .container {
+          width: 100%;
+      }
   </style>
 </head>
 
@@ -32,51 +36,75 @@
   </div>
   <div class="row">
     <div class="col">
-      <div id="reward-chart">
-      </div>
-    </div>
-    <div class="col">
-      <div id="weights">
-      </div>
-    </div>
-  </div>
-  <div class="row">
-    <div class="col-sm">
       <div id="environment"></div>
     </div>
-    <div class="col-sm">
-      <form>
-        <div class="form-group">
-          <label for="hiddenUnits">Hidden Units</label>
-          <input class="form-control" id="hiddenUnits"
-                 aria-describedby="Number of units in the hidden layer">
-        </div>
-        <div class="form-group">
-          <label for="forwardReward">Forward Reward</label>
-          <input class="form-control" id="forwardReward"
-                 aria-describedby="Reward for moving forward">
-          <label for="proximityThreshold">Proximity Threshold</label>
-          <input class="form-control" id="proximityThreshold"
-                 aria-describedby="Sensor distance at which to apply negative reward(1-200)">
-          <label for="proximityPenalty">Proximity Penalty</label>
-          <input class="form-control" id="proximityPenalty"
-                 aria-describedby="Penalty for the front sensor reporting a distance lesser than the threshold">
-          <label for="collisionPenalty">Collision Penalty</label>
-          <input class="form-control" id="collisionPenalty"
-                 aria-describedby="Penalty for colliding with a wall or box">
-        </div>
-      </form>
-      <button class='btn float-right' id='save' name='save'><i class='fa fa-refresh'> Save & Reset</i></button>
+    <div class="col">
+      <div id="reward-chart">
+      </div>
+       <div id="weights">
+      </div>
+      <div id="training-evolution-container">
+      </div>
+      <div id="training-history-container">
+      </div>
     </div>
   </div>
   <div class="row">
     <div class="col">
-      <div id="training-evolution-container">
-      </div>
+        <h4>Environment</h4>
+        <div class="form-group">
+          <label for="activeHistoryLength" class="form-control-sm">Active History Length</label>
+          <input class="form-control form-control-sm" id="activeHistoryLength"
+                 aria-describedby="The number of active features">
+        </div>
+        <div class="form-group">
+          <label for="obstacles" class="form-control-sm">Obstacles</label>
+          <input class="form-control form-control-sm" id="obstacles"
+                 aria-describedby="The number of obstacles">
+        </div>
+        <div class="form-group">
+          <label for="forwardReward" class="form-control-sm">Forward Reward</label>
+          <input class="form-control form-control-sm" id="forwardReward"
+                 aria-describedby="Reward for moving forward">
+          <label for="proximityThreshold" class="form-control-sm form-control-sm">Proximity Threshold</label>
+          <input class="form-control form-control-sm" id="proximityThreshold"
+                 aria-describedby="Sensor distance at which to apply negative reward(1-200)">
+          <label for="proximityPenalty" class="form-control-sm">Proximity Penalty</label>
+          <input class="form-control form-control-sm" id="proximityPenalty"
+                 aria-describedby="Penalty for the front sensor reporting a distance lesser than the threshold">
+          <label for="collisionPenalty" class="form-control-sm">Collision Penalty</label>
+          <input class="form-control form-control-sm" id="collisionPenalty"
+                 aria-describedby="Penalty for colliding with a wall or box">
+        </div>
+
     </div>
-     <div class="col">
-      <div id="training-history-container">
+    <div class="col">
+      <h4>Hyperparameters</h4>
+      <div class="form-group">
+        <label for="discountFactor" class="form-control-sm">Discount Factor</label>
+        <input class="form-control form-control-sm" id="discountFactor"
+               aria-describedby="Discount factor">
       </div>
+      <div class="form-group">
+        <label for="actorLearningRate" class="form-control-sm">Actor Learning Rate</label>
+        <input class="form-control form-control-sm" id="actorLearningRate"
+               aria-describedby="Actor Learning Rate">
+      </div>
+      <div class="form-group">
+        <label for="criticLearningRate" class="form-control-sm">Critic Learning Rate</label>
+        <input class="form-control form-control-sm" id="criticLearningRate"
+               aria-describedby="Critic Learning Rate">
+      </div>
+      <button class='btn float-right' id='save' name='save'><i class='fa fa-refresh'> Save</i></button>
+    </div>
+    <div class="col">
+        <h4>Model</h4>
+        <div class="form-group">
+          <label for="hiddenUnits" class="form-control-sm">Hidden Units</label>
+          <input class="form-control form-control-sm" id="hiddenUnits"
+                 aria-describedby="Number of units in the hidden layer">
+        </div>
+      <button class='btn float-right' id='save-reset' name='save'><i class='fa fa-refresh'> Save & Reset</i></button>
     </div>
   </div>
 </div>
@@ -106,20 +134,20 @@
     'advantage': []
   };
   let reward = 0;
-  let obstacles = localStorage.getItem('obstacles') && !reset ? localStorage.getItem('obstacles') : 0;
+  let historyLength = 64;
 </script>
 <script>
   class ActorCritic {
-    constructor(stateSize, actionSize, reset, act, config) {
+    constructor(featureCount, historyLength, actionSize, reset, act, config) {
       this.render = false;
-      this.stateSize = stateSize;
+      this.featureCount = featureCount;
+      this.historyLength = historyLength;
       this.actionSize = actionSize;
       this.valueSize = 1;
       this.act = act;
 
-      this.discountFactor = 0.99;
-      this.actorLearningRate = 0.001;
-      this.criticLearningRate = 0.005;
+      this.episode = 0;
+      this.averageReward = 0;
 
       this.config = config;
 
@@ -148,7 +176,7 @@
 
     buildActor() {
       const model = tf.sequential();
-      model.add(tf.layers.inputLayer({inputShape: [this.stateSize],}));
+      model.add(tf.layers.inputLayer({inputShape: [this.historyLength * this.featureCount],}));
 
       model.add(this.commonLayer);
 
@@ -158,7 +186,7 @@
         kernelInitializer: 'glorotUniform',
       }));
 
-      this.compile(model, this.actorLearningRate, tf.losses.softmaxCrossEntropy);
+      this.compile(model, config.actorLearningRate, tf.losses.softmaxCrossEntropy);
 
       return model;
     }
@@ -166,7 +194,7 @@
     buildCritic() {
       const model = tf.sequential();
 
-      model.add(tf.layers.inputLayer({inputShape: [this.stateSize],}));
+      model.add(tf.layers.inputLayer({inputShape: [this.historyLength * this.featureCount],}));
 
       model.add(this.commonLayer);
 
@@ -176,7 +204,7 @@
         kernelInitializer: 'glorotUniform',
       }));
 
-      this.compile(model, this.criticLearningRate, tf.losses.huberLoss);
+      this.compile(model, config.criticLearningRate, tf.losses.huberLoss);
 
       return model;
     }
@@ -188,8 +216,8 @@
       });
     }
 
-    getAction(state, actions) {
-      let policy = this.actor.predict(tf.tensor2d(normalizer.normalizeFeatures(state), [1, state.length]), {
+    getAction(state, actions, reward) {
+      let policy = this.actor.predict(tf.tensor2d(normalizer.normalizeFeatures(state), [1, state.length * state[0].length]), {
         batchSize: 1,
       });
 
@@ -197,6 +225,10 @@
       pushToWeightsChart(this.step, policyFlat);
 
       let action = chance.weighted(actions, policyFlat);
+      let randomAction = Math.random() > Math.max(reward, 1) / 100;
+      // if (randomAction) {
+      //   action = chance.weighted(actions, [1, 1, 1]);
+      // }
       if (this.act) {
         action = policyFlat.indexOf(Math.max.apply(0, policyFlat));
       }
@@ -204,23 +236,23 @@
       return action;
     }
 
-    trainModel(state, action, reward, nextState) {
+    async trainModel(state, action, reward, nextState) {
       let normalizedState = normalizer.normalizeFeatures(state);
       let advantages = new Array(this.actionSize).fill(0);
 
-      let tfState = tf.tensor2d(normalizedState, [1, state.length]);
+      let tfState = tf.tensor2d(normalizedState, [1, state.length * state[0].length]);
       let normalizedNextState = normalizer.normalizeFeatures(nextState);
-      let tfNextState = tf.tensor2d(normalizedNextState, [1, nextState.length]);
+      let tfNextState = tf.tensor2d(normalizedNextState, [1, nextState.length * state[0].length]);
 
       let predictedCurrentStateValue = this.critic.predict(tfState).dataSync();
       let predictedNextStateValue = this.critic.predict(tfNextState).dataSync();
 
-      let target = reward + this.discountFactor * predictedNextStateValue;
+      let target = reward + config.discountFactor * predictedNextStateValue;
       let advantage = target - predictedCurrentStateValue;
       advantages[action] = advantage;
       // console.log(action, reward);
 
-      this.actor.fit(tfState, tf.tensor([advantages]), {
+      await this.actor.fit(tfState, tf.tensor([advantages]), {
         epochs: 1,
       }).then(info => {
           this.latestActorLoss = info.history.loss[0];
@@ -228,7 +260,7 @@
         }
       );
 
-      this.critic.fit(tfState, tf.tensor([target]), {
+      await this.critic.fit(tfState, tf.tensor([target]), {
         epochs: 1,
       }).then(info => {
           this.latestCriticLoss = info.history.loss[0];
@@ -244,6 +276,12 @@
     async save() {
       await this.actor.save('localstorage://actor');
       await this.critic.save('localstorage://critic');
+
+      this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
+      this.episode++;
+
+      localStorage.setItem('episode', this.episode);
+      localStorage.setItem('averageReward', this.averageReward);
       localStorage.setItem('name', this.name);
     }
 
@@ -251,14 +289,16 @@
       let name = localStorage.getItem('name');
       if (name != "undefined") {
         tf.loadLayersModel(actorPath).then(model => {
-          this.compile(model, this.actorLearningRate, tf.losses.softmaxCrossEntropy);
+          this.compile(model, config.actorLearningRate, tf.losses.softmaxCrossEntropy);
           this.actor = model;
         });
         tf.loadLayersModel(criticPath).then(model => {
-          this.compile(model, this.criticLearningRate, tf.losses.huberLoss);
+          this.compile(model, config.criticLearningRate, tf.losses.huberLoss);
           this.critic = model;
         });
         this.name = name;
+        this.episode = localStorage.getItem('episode');
+        this.averageReward = localStorage.getItem('averageReward');
       }
     }
 
@@ -285,10 +325,15 @@
 
   let config = {
     hiddenUnits: 128,
+    obstacles: 0,
+    activeHistoryLength: 1,
     forwardReward: 1,
     proximityThreshold: 20,
     proximityPenalty: -2,
-    collisionPenalty: -100
+    collisionPenalty: -100,
+    discountFactor: 0.99,
+    actorLearningRate: 0.001,
+    criticLearningRate: 0.005,
   };
   if (localStorage.getItem('config')) {
     let savedConfig = JSON.parse(localStorage.getItem('config'));
@@ -298,6 +343,7 @@
   }
   let actorCritic = new ActorCritic(
     3,
+    historyLength,
     3,
     window.location.hash.substr(1) === 'reset',
     window.location.hash.substr(1) === 'act',
@@ -307,22 +353,31 @@
 
 </script>
 <script>
-  class Nomarlizer {
+  class Normalizer {
     normalizeSensorDistance(sensorDistance) {
-      sensorDistance = Math.round(sensorDistance/10);
+      sensorDistance = Math.round(sensorDistance / 10);
       return sensorDistance / 20;
     }
 
     normalizeFeatures(features) {
-      return [
-        this.normalizeSensorDistance(features[0]),
-        this.normalizeSensorDistance(features[1]),
-        this.normalizeSensorDistance(features[2]),
-      ];
+      let normalized = [];
+      features.forEach(function (feature, index) {
+        if(index >= (historyLength - config.activeHistoryLength)) {
+          normalized.push(this.normalizeSensorDistance(feature[0]));
+          normalized.push(this.normalizeSensorDistance(feature[1]));
+          normalized.push(this.normalizeSensorDistance(feature[2]));
+        } else {
+          normalized.push(this.normalizeSensorDistance(0));
+          normalized.push(this.normalizeSensorDistance(0));
+          normalized.push(this.normalizeSensorDistance(0));
+        }
+      }, this);
+
+      return normalized;
     }
   }
 
-  normalizer = new Nomarlizer();
+  normalizer = new Normalizer();
 </script>
 <script>
   class InputListener {
@@ -380,7 +435,7 @@
           y: this.sensor.position.y + sensorDistance * Math.sin(this.car.angle + this.angleOffset)
         }
       );
-      if(raycastCollisions.length > 0) {
+      if (raycastCollisions.length > 0) {
         let firstHit = raycastCollisions[0];
         sensorDistance = Math.sqrt(Math.pow(this.sensor.position.x - firstHit.point.x, 2)
           + Math.pow(this.sensor.position.y - firstHit.point.y, 2));
@@ -394,7 +449,7 @@
   function createChart() {
     var canvasContainer = document.getElementById('training-evolution-container');
     var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 300;
+    canvasContainer.style.width = 250;
     canvasContainer.appendChild(canvas);
     evolutionChart = new Chart(canvas, {
       type: 'line',
@@ -465,7 +520,7 @@
   function createHistoryChart(historyData) {
     var canvasContainer = document.getElementById('training-history-container');
     var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 300;
+    canvasContainer.style.width = 250;
     canvasContainer.appendChild(canvas);
     historyChart = new Chart(canvas, {
       type: 'line',
@@ -522,7 +577,7 @@
   function createRewardChart() {
     var canvasContainer = document.getElementById('reward-chart');
     var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 300;
+    canvasContainer.style.width = 250;
     canvasContainer.appendChild(canvas);
     rewardChart = new Chart(canvas, {
       type: 'bar',
@@ -579,7 +634,7 @@
   function createWeightsChart() {
     var canvasContainer = document.getElementById('weights');
     var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 300;
+    canvasContainer.style.width = 250;
     canvasContainer.appendChild(canvas);
     weightsChart = new Chart(canvas, {
       type: 'bar',
@@ -647,7 +702,7 @@
   latest_loss = 1;
   latest_accuracy = 0;
 
-  function initEnvironment() {
+  async function initEnvironment() {
     let Engine = Matter.Engine,
       Render = Matter.Render,
       World = Matter.World,
@@ -708,16 +763,22 @@
       collisions = 0;
 
     let previousState = [],
+      state = [],
       previousAction = 0,
       previousReward = 0,
       previousSensorDistanceFM;
+
+
+    for (let i = 0; i < historyLength; i++) {
+      state.push([0, 0, 0]);
+    }
 
     car.frictionAir = 0.1;
 
     // create two boxes and a ground
     let boxes = [];
 
-    for (i = 0; i < obstacles; i++) {
+    for (i = 0; i < config.obstacles; i++) {
       let box = Bodies.rectangle(800 * Math.random(), 400 * Math.random(), 50 + 100 * Math.random(), 50 + 100 * Math.random(), {isStatic: true});
       boxes.push(box);
     }
@@ -736,7 +797,7 @@
 
     boxes.push(car);
 
-    // add all of the bodies to the world
+    // add all the bodies to the world
     World.add(engine.world, boxes);
 
     Events.on(engine, 'collisionStart', function (event) {
@@ -752,7 +813,7 @@
     // run the renderer
     Render.run(render);
 
-    function addInput() {
+    async function addInput() {
       let done = false;
       const actions = [
         0, 1, 2,
@@ -762,27 +823,30 @@
       sensorDistanceFL = colliderFL.getSensorDistance()
       sensorDistanceFR = colliderFR.getSensorDistance()
 
-      let state = [
-        sensorDistanceFM,
+      state.push([
         sensorDistanceFL,
+        sensorDistanceFM,
         sensorDistanceFR
-      ];
+      ]);
+      state.shift();
 
       if (previousAction === 0) {
         reward += config.forwardReward;
       }
       if (sensorDistanceFM < config.proximityThreshold
-        && parseInt(sensorDistanceFM) <= parseInt(previousSensorDistanceFM)) {
-        reward += config.proximityPenalty;
+        || sensorDistanceFR < config.proximityThreshold
+        || sensorDistanceFL < config.proximityThreshold) {
+        if (previousSensorDistanceFM < sensorDistanceFM) {
+          reward += config.forwardReward;
+        }
+        if (previousSensorDistanceFM > sensorDistanceFM) {
+          reward += config.proximityPenalty;
+        }
       }
 
-      if (reward < -10) {
-        done = true;
-      }
-
-      let action = actorCritic.getAction(state, actions);
+      let action = actorCritic.getAction(state, actions, reward);
       if (previousState.length > 0) {
-        actorCritic.trainModel(previousState, previousAction, reward, state);
+        await actorCritic.trainModel(previousState, previousAction, reward, state);
       }
 
       previousState = state;
@@ -823,16 +887,8 @@
       }, {x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle)});
 
       pushToRewardChart(actorCritic.step, reward);
-      if (actorCritic.step > 400 || done) {
+      if (actorCritic.step > 100 || done) {
         actorCritic.save().then(function () {
-          if (collisions > 0) {
-            obstacles--;
-            obstacles = Math.max(obstacles, 0);
-          } else {
-            obstacles += 1;
-            obstacles = Math.min(obstacles, 5);
-          }
-          localStorage.setItem('obstacles', obstacles);
           historyData['averageActorLoss'].push(
             actorCritic.getAverageActorLoss()
           );
@@ -842,6 +898,11 @@
           historyData['advantage'].push(
             actorCritic.getAverageAdvantage()
           );
+          if (historyData['averageActorLoss'].length > 50) {
+            historyData['averageActorLoss'].shift();
+            historyData['averageCriticLoss'].shift();
+            historyData['advantage'].shift();
+          }
           localStorage.setItem('historyData', JSON.stringify(historyData));
           window.location.href = window.location.href.split('#')[0];
         });
@@ -865,7 +926,7 @@
     }
   }
 
-  document.getElementById('save').onclick = function () {
+  document.getElementById('save-reset').onclick = function () {
     for (const key in config) {
       if (document.getElementById(key)) {
         config[key] = document.getElementById(key).value;
@@ -877,6 +938,18 @@
     }
     location.reload();
   };
+
+  document.getElementById('save').onclick = function () {
+    for (const key in config) {
+      if (document.getElementById(key)) {
+        config[key] = document.getElementById(key).value;
+      }
+    }
+    localStorage.setItem('config', JSON.stringify(config));
+    location.reload();
+  };
+
+
   document.getElementById('pretrained').onclick = function () {
     let path = 'model/'
     $.get(path + 'config.json', function (data) {

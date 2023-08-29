@@ -37,6 +37,7 @@ int distanceFM;
 
 int motorRightReference;
 int motorLeftReference;
+int iddleDirection = 1;
 
 struct Channel {
     int en1;
@@ -84,6 +85,7 @@ unsigned long loopTimeMs;
 unsigned long distanceTimeMs;
 unsigned long pwmTimeMs;
 unsigned long mpuTimeMs;
+unsigned long iddleDirectionTimeMs;
 
 void setup() {
   Serial.begin(115200);
@@ -114,6 +116,7 @@ void setup() {
   pinMode(motorLeft.en2, OUTPUT);
   pinMode(motorLeft.pwm, OUTPUT);
   pinMode(standby, OUTPUT);
+  iddleDirectionTimeMs = millis();
 
   digitalWrite(standby, HIGH);
 
@@ -238,8 +241,8 @@ void sendToWs() {
   JsonObject data_motors_right = data_motors.createNestedObject("right");
   data_motors_right["value"] = motorRight.value;
   data["distanceFL"] = distanceFL;
-  data["distanceFM"] = distanceFR;
-  data["distanceFR"] = distanceFM;
+  data["distanceFM"] = distanceFM;
+  data["distanceFR"] = distanceFR;
   data["accelX"] = accelX;
   data["accelY"] = accelY;
   data["accelZ"] = accelZ;
@@ -338,13 +341,13 @@ void updatePWM(){
         motorRight.value = 220;
         motorLeft.value = -220;
       }
-    }
+    } 
 
     //Channel 1
     if(motorRight.value < 0){
         digitalWrite(motorRight.en1, LOW);
         digitalWrite(motorRight.en2, HIGH);
-    }else{
+    } else{
         digitalWrite(motorRight.en1, HIGH);
         digitalWrite(motorRight.en2, LOW);
     }
