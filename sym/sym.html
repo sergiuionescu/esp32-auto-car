@@ -32,6 +32,21 @@
       </button>
       <button class='btn' id='download' name='download'><i class='fa fa-download'> Download</i></button>
       <button class='btn' id='pretrained' name='pretrained'><i class='fa fa-hdd-o'> Load pretrained model</i></button>
+       Episode: <span id="episode">0</span>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <div id="reward-chart">
+      </div>
+       <div id="weights">
+      </div>
+    </div>
+    <div class="col">
+      <div id="training-evolution-container">
+      </div>
+      <div id="training-history-container">
+      </div>
     </div>
   </div>
   <div class="row">
@@ -39,14 +54,6 @@
       <div id="environment"></div>
     </div>
     <div class="col">
-      <div id="reward-chart">
-      </div>
-       <div id="weights">
-      </div>
-      <div id="training-evolution-container">
-      </div>
-      <div id="training-history-container">
-      </div>
     </div>
   </div>
   <div class="row">
@@ -80,6 +87,11 @@
     </div>
     <div class="col">
       <h4>Hyperparameters</h4>
+      <div class="form-group">
+        <label for="epsilon" class="form-control-sm">Epsilon</label>
+        <input class="form-control form-control-sm" id="epsilon"
+               aria-describedby="epsilon">
+      </div>
       <div class="form-group">
         <label for="discountFactor" class="form-control-sm">Discount Factor</label>
         <input class="form-control form-control-sm" id="discountFactor"
@@ -131,7 +143,7 @@
   && !reset ? JSON.parse(localStorage.getItem('historyData')) : {
     'averageActorLoss': [],
     'averageCriticLoss': [],
-    'advantage': []
+    'averageReward': []
   };
   let reward = 0;
   let historyLength = 64;
@@ -171,7 +183,17 @@
 
       this.actorLosses = [];
       this.criticLosses = [];
-      this.advantages = [];
+      this.rewards = [];
+    }
+
+    customActorLoss(logProb, advantages) {
+      return tf.tidy(() => {
+        // Multiply the log probability by the advantages
+        const loss = tf.mul(logProb, advantages);
+
+        // Take the negative of the mean (since we want to maximize expected returns)
+        return tf.neg(tf.mean(loss));
+      });
     }
 
     buildActor() {
@@ -186,7 +208,7 @@
         kernelInitializer: 'glorotUniform',
       }));
 
-      this.compile(model, config.actorLearningRate, tf.losses.softmaxCrossEntropy);
+      this.compile(model, config.actorLearningRate, this.customActorLoss);
 
       return model;
     }
@@ -197,6 +219,12 @@
       model.add(tf.layers.inputLayer({inputShape: [this.historyLength * this.featureCount],}));
 
       model.add(this.commonLayer);
+
+      model.add(tf.layers.dense({
+        units: 10,
+        activation: 'relu',
+        kernelInitializer: 'glorotUniform',
+      }));
 
       model.add(tf.layers.dense({
         units: this.valueSize,
@@ -216,39 +244,39 @@
       });
     }
 
-    getAction(state, actions, reward) {
+    getAction(state, actions) {
       let policy = this.actor.predict(tf.tensor2d(normalizer.normalizeFeatures(state), [1, state.length * state[0].length]), {
         batchSize: 1,
       });
 
       let policyFlat = policy.dataSync();
-      pushToWeightsChart(this.step, policyFlat);
+      let weights = [parseFloat(policyFlat[0]), parseFloat(policyFlat[1]), parseFloat(policyFlat[2])];
+      pushToWeightsChart(this.step, weights);
 
-      let action = chance.weighted(actions, policyFlat);
-      let randomAction = Math.random() > Math.max(reward, 1) / 100;
-      // if (randomAction) {
-      //   action = chance.weighted(actions, [1, 1, 1]);
-      // }
-      if (this.act) {
-        action = policyFlat.indexOf(Math.max.apply(0, policyFlat));
+      let action = chance.weighted(actions, weights);
+      if(Math.random() < this.config.epsilon) {
+        action = chance.weighted(actions, [1,1,1]);
       }
 
       return action;
     }
 
     async trainModel(state, action, reward, nextState) {
-      let normalizedState = normalizer.normalizeFeatures(state);
       let advantages = new Array(this.actionSize).fill(0);
 
+      let normalizedState = normalizer.normalizeFeatures(state);
       let tfState = tf.tensor2d(normalizedState, [1, state.length * state[0].length]);
+      let predictedCurrentStateValue = this.critic.predict(tfState).dataSync();
+
       let normalizedNextState = normalizer.normalizeFeatures(nextState);
       let tfNextState = tf.tensor2d(normalizedNextState, [1, nextState.length * state[0].length]);
-
-      let predictedCurrentStateValue = this.critic.predict(tfState).dataSync();
       let predictedNextStateValue = this.critic.predict(tfNextState).dataSync();
 
       let target = reward + config.discountFactor * predictedNextStateValue;
       let advantage = target - predictedCurrentStateValue;
+
+      pushToRewardChart(actorCritic.step, reward, parseFloat(predictedCurrentStateValue), advantage, target);
+
       advantages[action] = advantage;
       // console.log(action, reward);
 
@@ -268,8 +296,8 @@
         }
       );
 
-      this.advantages.push(advantage);
-      pushToEvolutionChart(this.step, this.latestActorLoss, this.latestCriticLoss, advantage);
+      this.rewards.push(reward);
+      pushToEvolutionChart(this.step, this.latestActorLoss, this.latestCriticLoss);
       this.step++;
     }
 
@@ -289,7 +317,7 @@
       let name = localStorage.getItem('name');
       if (name != "undefined") {
         tf.loadLayersModel(actorPath).then(model => {
-          this.compile(model, config.actorLearningRate, tf.losses.softmaxCrossEntropy);
+          this.compile(model, config.actorLearningRate, this.customActorLoss);
           this.actor = model;
         });
         tf.loadLayersModel(criticPath).then(model => {
@@ -299,6 +327,7 @@
         this.name = name;
         this.episode = localStorage.getItem('episode');
         this.averageReward = localStorage.getItem('averageReward');
+        document.getElementById('episode').innerText = this.episode;
       }
     }
 
@@ -310,8 +339,8 @@
       return this.getAverage(this.criticLosses);
     }
 
-    getAverageAdvantage() {
-      return this.getAverage(this.advantages);
+    getAverageReward() {
+      return this.getAverage(this.rewards);
     }
 
     getAverage(list) {
@@ -334,11 +363,12 @@
     discountFactor: 0.99,
     actorLearningRate: 0.001,
     criticLearningRate: 0.005,
+    epsilon: 0.9
   };
   if (localStorage.getItem('config')) {
     let savedConfig = JSON.parse(localStorage.getItem('config'));
     for (const key in savedConfig) {
-      config[key] = parseInt(savedConfig[key]);
+      config[key] = parseFloat(savedConfig[key]);
     }
   }
   let actorCritic = new ActorCritic(
@@ -449,7 +479,7 @@
   function createChart() {
     var canvasContainer = document.getElementById('training-evolution-container');
     var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 250;
+    canvasContainer.style.width = 350;
     canvasContainer.appendChild(canvas);
     evolutionChart = new Chart(canvas, {
       type: 'line',
@@ -468,13 +498,6 @@
             yAxisID: 'y-axis-1',
             fill: false,
             borderColor: "#16A085",
-            data: []
-          },
-          {
-            label: 'Advantage',
-            yAxisID: 'y-axis-1',
-            fill: false,
-            borderColor: "#1634a0",
             data: []
           }
         ]
@@ -498,16 +521,14 @@
     });
   }
 
-  function pushToEvolutionChart(step, actorLoss, criticLoss, advantage) {
+  function pushToEvolutionChart(step, actorLoss, criticLoss) {
     evolutionChart.data.labels.push(step);
     evolutionChart.data.datasets[0].data.push(actorLoss);
     evolutionChart.data.datasets[1].data.push(criticLoss);
-    evolutionChart.data.datasets[2].data.push(advantage);
     if (evolutionChart.data.labels.length > 50) {
       evolutionChart.data.labels.shift();
       evolutionChart.data.datasets[0].data.shift();
       evolutionChart.data.datasets[1].data.shift();
-      evolutionChart.data.datasets[2].data.shift();
     }
     evolutionChart.update();
   }
@@ -520,7 +541,7 @@
   function createHistoryChart(historyData) {
     var canvasContainer = document.getElementById('training-history-container');
     var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 250;
+    canvasContainer.style.width = 350;
     canvasContainer.appendChild(canvas);
     historyChart = new Chart(canvas, {
       type: 'line',
@@ -542,11 +563,11 @@
             data: historyData['averageCriticLoss']
           },
           {
-            label: 'Advantage',
+            label: 'Reward',
             yAxisID: 'y-axis-1',
             fill: false,
             borderColor: "#1634a0",
-            data: historyData['advantage']
+            data: historyData['averageReward']
           }
         ]
       },
@@ -577,10 +598,10 @@
   function createRewardChart() {
     var canvasContainer = document.getElementById('reward-chart');
     var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 250;
+    canvasContainer.style.width = 350;
     canvasContainer.appendChild(canvas);
     rewardChart = new Chart(canvas, {
-      type: 'bar',
+      type: 'line',
       data: {
         labels: [],
         datasets: [
@@ -589,6 +610,29 @@
             yAxisID: 'y-axis-1',
             fill: false,
             backgroundColor: "#157041",
+            borderColor: "green",
+            data: []
+          },
+          {
+            label: 'predicted',
+            yAxisID: 'y-axis-1',
+            fill: false,
+            borderColor: "orange",
+            data: [],
+            hidden: true,
+          },
+          {
+            label: 'advantage',
+            yAxisID: 'y-axis-1',
+            fill: false,
+            borderColor: "yellow",
+            data: []
+          },
+          {
+            label: 'target',
+            yAxisID: 'y-axis-1',
+            fill: false,
+            borderColor: "gray",
             data: []
           }
         ]
@@ -612,17 +656,18 @@
     });
   }
 
-  function pushToRewardChart(step, score) {
+  function pushToRewardChart(step, score, predicted, advantage, target) {
     rewardChart.data.labels.push(step);
     rewardChart.data.datasets[0].data.push(score);
+    rewardChart.data.datasets[1].data.push(predicted);
+    rewardChart.data.datasets[2].data.push(advantage);
+    rewardChart.data.datasets[3].data.push(target);
     if (rewardChart.data.labels.length > 50) {
       rewardChart.data.labels.shift();
       rewardChart.data.datasets[0].data.shift();
-    }
-    if (score >= 0) {
-      rewardChart.data.datasets[0].backgroundColor = "#157041";
-    } else {
-      rewardChart.data.datasets[0].backgroundColor = "#c30101";
+      rewardChart.data.datasets[1].data.shift();
+      rewardChart.data.datasets[2].data.shift();
+      rewardChart.data.datasets[3].data.shift();
     }
     rewardChart.update();
   }
@@ -634,7 +679,7 @@
   function createWeightsChart() {
     var canvasContainer = document.getElementById('weights');
     var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 250;
+    canvasContainer.style.width = 350;
     canvasContainer.appendChild(canvas);
     weightsChart = new Chart(canvas, {
       type: 'bar',
@@ -844,9 +889,9 @@
         }
       }
 
-      let action = actorCritic.getAction(state, actions, reward);
+      let action = actorCritic.getAction(state, actions);
       if (previousState.length > 0) {
-        await actorCritic.trainModel(previousState, previousAction, reward, state);
+        await actorCritic.trainModel(previousState, previousAction, previousReward, state);
       }
 
       previousState = state;
@@ -886,8 +931,7 @@
         y: car.position.y + carWidth * Math.cos(car.angle) / 2
       }, {x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle)});
 
-      pushToRewardChart(actorCritic.step, reward);
-      if (actorCritic.step > 100 || done) {
+      if (actorCritic.step > 200 || done) {
         actorCritic.save().then(function () {
           historyData['averageActorLoss'].push(
             actorCritic.getAverageActorLoss()
@@ -895,13 +939,13 @@
           historyData['averageCriticLoss'].push(
             actorCritic.getAverageCriticLoss()
           );
-          historyData['advantage'].push(
-            actorCritic.getAverageAdvantage()
+          historyData['averageReward'].push(
+            actorCritic.getAverageReward()
           );
           if (historyData['averageActorLoss'].length > 50) {
             historyData['averageActorLoss'].shift();
             historyData['averageCriticLoss'].shift();
-            historyData['advantage'].shift();
+            historyData['averageReward'].shift();
           }
           localStorage.setItem('historyData', JSON.stringify(historyData));
           window.location.href = window.location.href.split('#')[0];
