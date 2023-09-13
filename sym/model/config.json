@@ -1,7 +1,13 @@
 {
-  "hiddenUnits": 128,
+  "hiddenUnits": 32,
+  "obstacles": 0,
+  "activeHistoryLength": 5,
   "forwardReward": 1,
-  "proximityThreshold": 20,
+  "proximityThreshold": 100,
   "proximityPenalty": -2,
-  "collisionPenalty": -100
+  "collisionPenalty": -5,
+  "discountFactor": 0.99,
+  "actorLearningRate": 0.001,
+  "criticLearningRate": 0.005,
+  "epsilon": 0.9
 }
