@@ -71,6 +71,9 @@
                  aria-describedby="The number of obstacles">
         </div>
         <div class="form-group">
+          <label for="cumulativeReward" class="form-control-sm">Cumulative Reward</label>
+          <input class="form-control form-control-sm" type="checkbox" id="cumulativeReward"
+                 aria-describedby="Cumulate reward on each step">
           <label for="forwardReward" class="form-control-sm">Forward Reward</label>
           <input class="form-control form-control-sm" id="forwardReward"
                  aria-describedby="Reward for moving forward">
@@ -227,12 +230,6 @@
       model.add(this.commonLayer);
 
       model.add(tf.layers.dense({
-        units: 10,
-        activation: 'relu',
-        kernelInitializer: 'glorotUniform',
-      }));
-
-      model.add(tf.layers.dense({
         units: this.valueSize,
         activation: 'linear',
         kernelInitializer: 'glorotUniform',
@@ -256,13 +253,13 @@
       });
 
       let policyFlat = policy.dataSync();
-      let weights = [parseFloat(policyFlat[0]), parseFloat(policyFlat[1]), parseFloat(policyFlat[2])];
+      let weights = [parseFloat(policyFlat[0]), parseFloat(policyFlat[1]), parseFloat(policyFlat[2]), parseFloat(policyFlat[3])];
       pushToSensorsChart(this.step, state);
       pushToWeightsChart(this.step, weights);
 
       let action = chance.weighted(actions, weights);
       if(Math.random() < this.config.epsilon) {
-        action = chance.weighted(actions, [1,1,1]);
+        action = chance.weighted(actions, [1,1,1,1]);
       }
 
       return action;
@@ -295,7 +292,7 @@
     }
 
     async trainModel() {
-      let epochs = 100;
+      let epochs = 50;
 
       let tfState = tf.tensor2d(
         this.trainingBuffer['tfState'],
@@ -315,19 +312,25 @@
 
       await this.actor.fit(tfState, advantages, {
         epochs: epochs,
-        callbacks: {onEpochEnd: onActorEpochEnd}
+        callbacks: {
+          onEpochEnd: onActorEpochEnd,
+          earlyStopping: tf.callbacks.earlyStopping
+        }
       }).then(info => {
           this.latestActorLoss = info.history.loss.slice(-1);
-          this.actorLosses.push(this.latestActorLoss);
+          this.actorLosses.push(this.latestActorLoss[0]);
         }
       );
 
       await this.critic.fit(tfState, targets, {
         epochs: epochs,
-        callbacks: {onEpochEnd: onCriticEpochEnd}
+        callbacks: {
+          onEpochEnd: onCriticEpochEnd,
+          earlyStopping: tf.callbacks.earlyStopping
+        }
       }).then(info => {
           this.latestCriticLoss = info.history.loss.slice(-1);
-          this.criticLosses.push(this.latestCriticLoss);
+          this.criticLosses.push(this.latestCriticLoss[0]);
         }
       );
     }
@@ -387,6 +390,7 @@
     hiddenUnits: 32,
     obstacles: 0,
     activeHistoryLength: 5,
+    cumulativeReward: 0,
     forwardReward: 1,
     proximityThreshold: 100,
     proximityPenalty: -2,
@@ -395,7 +399,7 @@
     actorLearningRate: 0.001,
     criticLearningRate: 0.005,
     epsilon: 0.9
-  };
+  }
   if (localStorage.getItem('config')) {
     let savedConfig = JSON.parse(localStorage.getItem('config'));
     for (const key in savedConfig) {
@@ -405,7 +409,7 @@
   let actorCritic = new ActorCritic(
     3,
     historyLength,
-    3,
+    4,
     window.location.hash.substr(1) === 'reset',
     window.location.hash.substr(1) === 'act',
     config
@@ -571,10 +575,15 @@
 
   function pushToHistoryChart(loss, type) {
     if(type === 'actor') {
-      historyChart.data.labels.push(historyChart.data.datasets[0].data.length);
       historyChart.data.datasets[0].data.push(loss);
+      if (historyChart.data.datasets[0].data.length > historyChart.data.labels.length) {
+        historyChart.data.labels.push(historyChart.data.datasets[0].data.length);
+      }
     } else {
       historyChart.data.datasets[1].data.push(loss);
+      if (historyChart.data.datasets[1].data.length > historyChart.data.labels.length) {
+        historyChart.data.labels.push(historyChart.data.datasets[1].data.length);
+      }
     }
     historyChart.update();
   }
@@ -692,6 +701,12 @@
             fill: false,
             backgroundColor: "#E74C3C",
             data: []
+          },
+          {
+            label: 'Back',
+            fill: false,
+            backgroundColor: "#e7cb3c",
+            data: []
           }
         ]
       },
@@ -717,13 +732,13 @@
     weightsChart.data.datasets[0].data.push(weights[1]);
     weightsChart.data.datasets[1].data.push(weights[0]);
     weightsChart.data.datasets[2].data.push(weights[2]);
-    // weightsChart.data.datasets[3].data.push(weights[3]);
+    weightsChart.data.datasets[3].data.push(weights[3]);
     if (weightsChart.data.labels.length > 50) {
       weightsChart.data.labels.shift();
       weightsChart.data.datasets[0].data.shift();
       weightsChart.data.datasets[1].data.shift();
       weightsChart.data.datasets[2].data.shift();
-      // weightsChart.data.datasets[3].data.shift();
+      weightsChart.data.datasets[3].data.shift();
     }
     weightsChart.update();
   }
@@ -808,7 +823,7 @@
       Events = Matter.Events,
       Bodies = Matter.Bodies,
       Body = Matter.Body,
-      sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 200,
+      sensorDistanceBM = sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 200,
       multiplier = 1;
 
     createWeightsChart();
@@ -832,6 +847,14 @@
       }
     });
 
+    let activeSensorColor = {
+        render: {
+             fillStyle: 'red',
+             strokeStyle: 'blue',
+             lineWidth: 3
+        }
+    }
+
     //create the car
     let
       carX = 60,
@@ -844,9 +867,10 @@
       carWheelBL = Bodies.rectangle(carX + carLength / 2 - carLength / 3.5, carY - carWidth / 2, carLength / 3.5, carWidth / 3.5),
       carWheelFR = Bodies.rectangle(carX - carLength / 2 + carLength / 3.5, carY + carWidth / 2, carLength / 3.5, carWidth / 3.5),
       carWheelBR = Bodies.rectangle(carX + carLength / 2 - carLength / 3.5, carY + carWidth / 2, carLength / 3.5, carWidth / 3.5),
-      sensorFM = Bodies.circle(carX + carLength / 2 - carLength / 15, carY, sensorRadius),
-      sensorFL = Bodies.circle(carX + carLength / 2 - carLength / 15, carY - carWidth / 2 + carLength * 2 / 15, sensorRadius),
-      sensorFR = Bodies.circle(carX + carLength / 2 - carLength / 15, carY + carWidth / 2 - carLength * 2 / 15, sensorRadius),
+      sensorBM = Bodies.circle(carX - carLength / 2 + carLength / 15, carY, sensorRadius),
+      sensorFM = Bodies.circle(carX + carLength / 2 - carLength / 15, carY, sensorRadius, activeSensorColor),
+      sensorFL = Bodies.circle(carX + carLength / 2 - carLength / 15, carY - carWidth / 2 + carLength * 2 / 15, sensorRadius, activeSensorColor),
+      sensorFR = Bodies.circle(carX + carLength / 2 - carLength / 15, carY + carWidth / 2 - carLength * 2 / 15, sensorRadius, activeSensorColor),
       car = Body.create({
         parts: [
           carBody,
@@ -854,6 +878,7 @@
           carWheelBL,
           carWheelFR,
           carWheelBR,
+          sensorBM,
           sensorFM,
           sensorFL,
           sensorFR
@@ -869,7 +894,7 @@
 
 
     for (let i = 0; i < historyLength; i++) {
-      state.push([0, 0, 0]);
+      state.push([sensorDistanceMax, sensorDistanceMax, sensorDistanceMax]);
     }
 
     car.frictionAir = 0.1;
@@ -878,7 +903,7 @@
     let boxes = [];
 
     for (i = 0; i < config.obstacles; i++) {
-      let box = Bodies.rectangle(800 * Math.random(), 400 * Math.random(), 50 + 100 * Math.random(), 50 + 100 * Math.random(), {isStatic: true});
+      let box = Bodies.polygon(300 + 500 * Math.random(), 400 * Math.random(), parseInt(3 + 5 * Math.random()), 10 + 50 * Math.random(), {isStatic: true});
       boxes.push(box);
     }
     let wallB = Bodies.rectangle(400, 400, 810, 20, {isStatic: true});
@@ -890,6 +915,7 @@
     boxes.push(wallL);
     boxes.push(wallR);
 
+    let colliderBM = new Collider(boxes, car, sensorBM, 'sensorFM', Math.PI);
     let colliderFM = new Collider(boxes, car, sensorFM, 'sensorFM', 0);
     let colliderFL = new Collider(boxes, car, sensorFL, 'sensorFL', -Math.PI / 4);
     let colliderFR = new Collider(boxes, car, sensorFR, 'sensorFR', Math.PI / 4);
@@ -915,12 +941,13 @@
     async function addInput() {
       let done = false;
       const actions = [
-        0, 1, 2,
+        0, 1, 2, 3
       ];
 
-      sensorDistanceFM = colliderFM.getSensorDistance()
-      sensorDistanceFL = colliderFL.getSensorDistance()
-      sensorDistanceFR = colliderFR.getSensorDistance()
+      sensorDistanceBM = colliderBM.getSensorDistance();
+      sensorDistanceFM = colliderFM.getSensorDistance();
+      sensorDistanceFL = colliderFL.getSensorDistance();
+      sensorDistanceFR = colliderFR.getSensorDistance();
 
       state.push([
         sensorDistanceFL,
@@ -929,19 +956,14 @@
       ]);
       state.shift();
 
-      if (previousAction === 0) {
-        reward += config.forwardReward;
+      if(!config.cumulativeReward) {
+        reward = 0;
       }
-      if (sensorDistanceFM < config.proximityThreshold
-        || sensorDistanceFR < config.proximityThreshold
-        || sensorDistanceFL < config.proximityThreshold) {
-        if (previousSensorDistanceFM < sensorDistanceFM) {
-          reward += config.forwardReward;
-        }
-        if (previousSensorDistanceFM > sensorDistanceFM) {
-          reward += config.proximityPenalty;
-        }
+      if (previousAction === 0 && sensorDistanceFM > config.proximityThreshold) {
+        reward += sensorDistanceMax;
       }
+      let minDistance = Math.min(sensorDistanceBM, sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
+      reward -= sensorDistanceMax - minDistance;
 
       let action = actorCritic.getAction(state, actions);
       if (previousState.length > 0) {
@@ -1021,7 +1043,11 @@
   function updateConfigUi() {
     for (const key in config) {
       if (document.getElementById(key)) {
-        document.getElementById(key).value = config[key];
+        if(document.getElementById(key).type === 'checkbox') {
+          document.getElementById(key).checked = config[key] === 1;
+        } else {
+          document.getElementById(key).value = config[key];
+        }
       }
     }
   }
@@ -1042,12 +1068,16 @@
   document.getElementById('save').onclick = function () {
     for (const key in config) {
       if (document.getElementById(key)) {
-        config[key] = document.getElementById(key).value;
+        if(document.getElementById(key).type === 'checkbox') {
+          config[key] = document.getElementById(key).checked === true ? 1 : 0;
+        } else {
+          config[key] = document.getElementById(key).value;
+        }
       }
     }
     localStorage.setItem('config', JSON.stringify(config));
     location.reload();
-  };
+  }
 
 
   document.getElementById('pretrained').onclick = function () {

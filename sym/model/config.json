@@ -2,6 +2,7 @@
   "hiddenUnits": 32,
   "obstacles": 0,
   "activeHistoryLength": 5,
+  "cumulativeReward": 0,
   "forwardReward": 1,
   "proximityThreshold": 100,
   "proximityPenalty": -2,
@@ -9,5 +10,5 @@
   "discountFactor": 0.99,
   "actorLearningRate": 0.001,
   "criticLearningRate": 0.005,
-  "epsilon": 0.9
+  "epsilon": 0
 }
