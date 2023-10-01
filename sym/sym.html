@@ -151,6 +151,22 @@
   };
   let reward = 0;
   let historyLength = 64;
+
+  let wakelock;
+  const canWakeLock = () => 'wakeLock' in navigator;
+  async function lockWakeState() {
+    if(!canWakeLock()) return;
+    try {
+      wakelock = await navigator.wakeLock.request();
+      wakelock.addEventListener('release', () => {
+        console.log('Screen Wake State Locked:', !wakelock.released);
+      });
+      console.log('Screen Wake State Locked:', !wakelock.released);
+    } catch(e) {
+      console.error('Failed to lock wake state with reason:', e.message);
+    }
+  }
+  lockWakeState();
 </script>
 <script>
   class ActorCritic {
@@ -751,6 +767,7 @@
     canvasContainer.appendChild(canvas);
     sensorsChart = new Chart(canvas, {
       type: 'bar',
+      options: {animation:false},
       data: {
         labels: [],
         datasets: [
