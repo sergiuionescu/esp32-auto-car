@@ -852,6 +852,8 @@
     engine.world.gravity.y = 0;
 
     // create a renderer
+    let environmentWidth = 1000;
+    let environmentHeight = 450;
     let render = Render.create({
       element: document.getElementById('environment'),
       engine: engine,
@@ -861,8 +863,8 @@
         showVelocity: false,
         showCollisions: false,
         wireframes: false,
-        width: 800,
-        height: 400
+        width: environmentWidth,
+        height: environmentHeight
       }
     });
 
@@ -922,13 +924,13 @@
     let boxes = [];
 
     for (i = 0; i < config.obstacles; i++) {
-      let box = Bodies.polygon(300 + 500 * Math.random(), 400 * Math.random(), parseInt(3 + 5 * Math.random()), 10 + 50 * Math.random(), {isStatic: true});
+      let box = Bodies.polygon(300 + environmentWidth/2 * Math.random(), environmentHeight * Math.random(), parseInt(3 + 5 * Math.random()), 10 + 50 * Math.random(), {isStatic: true});
       boxes.push(box);
     }
-    let wallB = Bodies.rectangle(400, 400, 810, 20, {isStatic: true});
-    let wallT = Bodies.rectangle(400, 0, 810, 20, {isStatic: true});
-    let wallL = Bodies.rectangle(0, 205, 20, 810, {isStatic: true});
-    let wallR = Bodies.rectangle(800, 205, 20, 810, {isStatic: true});
+    let wallB = Bodies.rectangle(environmentWidth/2, environmentHeight, environmentWidth+10, 20, {isStatic: true});
+    let wallT = Bodies.rectangle(environmentWidth/2, 0, environmentWidth+10, 20, {isStatic: true});
+    let wallL = Bodies.rectangle(0, 205, 20, environmentWidth+10, {isStatic: true});
+    let wallR = Bodies.rectangle(environmentWidth, 205, 20, environmentWidth+10, {isStatic: true});
     boxes.push(wallB);
     boxes.push(wallT);
     boxes.push(wallL);
