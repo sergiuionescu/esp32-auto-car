@@ -640,14 +640,16 @@
             yAxisID: 'y-axis-1',
             fill: false,
             borderColor: "yellow",
-            data: []
+            data: [],
+            hidden: true,
           },
           {
             label: 'target',
             yAxisID: 'y-axis-1',
             fill: false,
             borderColor: "gray",
-            data: []
+            data: [],
+            hidden: true,
           }
         ]
       },
@@ -978,6 +980,9 @@
       }
       if (previousAction === 0 && sensorDistanceFM > config.proximityThreshold) {
         reward += sensorDistanceMax;
+      }
+      if (previousAction === 3) {
+        reward -= sensorDistanceMax/10;
       }
       let minDistance = Math.min(sensorDistanceBM, sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
       reward -= sensorDistanceMax - minDistance;
