@@ -150,7 +150,7 @@
     'averageReward': []
   };
   let reward = 0;
-  let historyLength = 64;
+  let historyLength = 32;
 
   let wakelock;
   const canWakeLock = () => 'wakeLock' in navigator;
@@ -980,13 +980,13 @@
       if(!config.cumulativeReward) {
         reward = 0;
       }
-      if (previousAction === 0 && sensorDistanceFM > config.proximityThreshold) {
+      let minDistance = Math.min(sensorDistanceBM, sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
+      if (previousAction === 0 && minDistance > config.proximityThreshold) {
         reward += sensorDistanceMax;
       }
       if (previousAction === 3) {
         reward -= sensorDistanceMax/10;
       }
-      let minDistance = Math.min(sensorDistanceBM, sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
       reward -= sensorDistanceMax - minDistance;
 
       let action = actorCritic.getAction(state, actions);
