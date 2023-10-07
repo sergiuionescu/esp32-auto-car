@@ -80,12 +80,12 @@
           <label for="proximityThreshold" class="form-control-sm form-control-sm">Proximity Threshold</label>
           <input class="form-control form-control-sm" id="proximityThreshold"
                  aria-describedby="Sensor distance at which to apply negative reward(1-200)">
-          <label for="proximityPenalty" class="form-control-sm">Proximity Penalty</label>
-          <input class="form-control form-control-sm" id="proximityPenalty"
-                 aria-describedby="Penalty for the front sensor reporting a distance lesser than the threshold">
-          <label for="collisionPenalty" class="form-control-sm">Collision Penalty</label>
-          <input class="form-control form-control-sm" id="collisionPenalty"
-                 aria-describedby="Penalty for colliding with a wall or box">
+<!--          <label for="proximityPenalty" class="form-control-sm">Proximity Penalty</label>-->
+<!--          <input class="form-control form-control-sm" id="proximityPenalty"-->
+<!--                 aria-describedby="Penalty for the front sensor reporting a distance lesser than the threshold">-->
+<!--          <label for="collisionPenalty" class="form-control-sm">Collision Penalty</label>-->
+<!--          <input class="form-control form-control-sm" id="collisionPenalty"-->
+<!--                 aria-describedby="Penalty for colliding with a wall or box">-->
         </div>
 
     </div>
@@ -175,6 +175,9 @@
       this.featureCount = featureCount;
       this.historyLength = historyLength;
       this.actionSize = actionSize;
+      this.replayBuffer = [];
+      this.replayBufferSize = 1000;
+      this.miniBatchSize = 400;
       this.valueSize = 1;
       this.act = act;
 
@@ -281,6 +284,23 @@
       return action;
     }
 
+    bufferReplay(previousState, previousAction, previousReward, state) {
+      this.replayBuffer.push({previousState, previousAction, previousReward, state});
+      if (this.replayBuffer.length > this.replayBufferSize) {
+        this.replayBuffer.shift();
+      }
+      pushToRewardChart(this.step, previousReward, 0, 0, 0);
+      this.step ++;
+    }
+
+    convertRawTrainingHistory() {
+      this.replayBuffer.forEach(data => {
+        if(Math.random() < this.miniBatchSize/this.replayBuffer.length) {
+          actorCritic.bufferTrainingData(data.previousState, data.previousAction, data.previousReward, data.state);
+        }
+      })
+    }
+
     async bufferTrainingData(state, action, reward, nextState) {
       let advantages = new Array(this.actionSize).fill(0);
 
@@ -358,6 +378,7 @@
       this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
       this.episode++;
 
+      localStorage.setItem('replayBuffer', JSON.stringify(this.replayBuffer));
       localStorage.setItem('episode', this.episode);
       localStorage.setItem('averageReward', this.averageReward);
       localStorage.setItem('name', this.name);
@@ -371,11 +392,13 @@
           this.actor = model;
         });
         tf.loadLayersModel(criticPath).then(model => {
+          model.layers[1] = this.actor.layers[1];
           this.compile(model, config.criticLearningRate, tf.losses.huberLoss);
           this.critic = model;
         });
         this.name = name;
         this.episode = localStorage.getItem('episode');
+        this.replayBuffer = JSON.parse(localStorage.getItem('replayBuffer'));
         this.averageReward = localStorage.getItem('averageReward');
         document.getElementById('episode').innerText = this.episode;
       }
@@ -992,7 +1015,7 @@
 
       let action = actorCritic.getAction(state, actions);
       if (previousState.length > 0) {
-        await actorCritic.bufferTrainingData(previousState, previousAction, previousReward, state);
+        actorCritic.bufferReplay(previousState, previousAction, previousReward, state);
       }
 
       previousState = state;
@@ -1033,6 +1056,8 @@
       }, {x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle)});
 
       if (actorCritic.step > 400 || done) {
+        actorCritic.convertRawTrainingHistory();
+
         await actorCritic.trainModel();
 
         actorCritic.save().then(function () {
