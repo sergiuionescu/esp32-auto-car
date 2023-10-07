@@ -286,17 +286,14 @@
 
     bufferReplay(previousState, previousAction, previousReward, state) {
       this.replayBuffer.push({previousState, previousAction, previousReward, state});
-      if (this.replayBuffer.length > this.replayBufferSize) {
-        this.replayBuffer.shift();
-      }
       pushToRewardChart(this.step, previousReward, 0, 0, 0);
       this.step ++;
     }
 
     convertRawTrainingHistory() {
-      this.replayBuffer.forEach(data => {
+      this.replayBuffer.forEach(async (data) => {
         if(Math.random() < this.miniBatchSize/this.replayBuffer.length) {
-          actorCritic.bufferTrainingData(data.previousState, data.previousAction, data.previousReward, data.state);
+          await actorCritic.bufferTrainingData(data.previousState, data.previousAction, data.previousReward, data.state);
         }
       })
     }
@@ -328,7 +325,7 @@
     }
 
     async trainModel() {
-      let epochs = 50;
+      let epochs = 100;
 
       let tfState = tf.tensor2d(
         this.trainingBuffer['tfState'],
@@ -378,7 +375,7 @@
       this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
       this.episode++;
 
-      localStorage.setItem('replayBuffer', JSON.stringify(this.replayBuffer));
+      localStorage.setItem('replayBuffer', JSON.stringify(this.replayBuffer.slice(-this.replayBufferSize)));
       localStorage.setItem('episode', this.episode);
       localStorage.setItem('averageReward', this.averageReward);
       localStorage.setItem('name', this.name);
