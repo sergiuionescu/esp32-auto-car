@@ -142,6 +142,25 @@
     src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script>
+  async function compress(inString) {
+    const compressedStream = await new Response(inString)
+      .body.pipeThrough(new CompressionStream('gzip'))
+    const bytes = await new Response(compressedStream).arrayBuffer()
+    let decoder = new TextDecoder();
+    return decoder.decode(bytes);
+  }
+
+  async function decompress(string) {
+    let encoder = new TextEncoder()
+    const bytes = encoder.encode(string).buffer;
+    const decompressedStream = await new Response(bytes)
+      .body.pipeThrough(new DecompressionStream('gzip'))
+    const outString = await new Response(decompressedStream).text()
+
+    return outString;
+  }
+</script>
+<script>
   let reset = window.location.hash.substr(1) === 'reset';
   let historyData = localStorage.getItem('historyData')
   && !reset ? JSON.parse(localStorage.getItem('historyData')) : {
@@ -325,7 +344,7 @@
     }
 
     async trainModel() {
-      let epochs = 100;
+      let epochs = 50;
 
       let tfState = tf.tensor2d(
         this.trainingBuffer['tfState'],
@@ -898,7 +917,7 @@
 
     //create the car
     let
-      carX = 60,
+      carX = 100,
       carY = 200,
       carLength = 50,
       carWidth = carLength / 5 * 3,
