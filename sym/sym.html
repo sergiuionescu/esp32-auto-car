@@ -128,6 +128,7 @@
 <script src="js/matter.min.js"></script>
 <script src="js/raycast.min.js"></script>
 <script src="js/chance.min.js"></script>
+<script src="js/dexie.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.1/dist/tf.min.js"></script>
 
 <script src="https://code.jquery.com/jquery-3.4.0.min.js"
@@ -142,23 +143,24 @@
     src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script>
-  async function compress(inString) {
-    const compressedStream = await new Response(inString)
-      .body.pipeThrough(new CompressionStream('gzip'))
-    const bytes = await new Response(compressedStream).arrayBuffer()
-    let decoder = new TextDecoder();
-    return decoder.decode(bytes);
-  }
+  class KeyValueStore {
+    constructor() {
+      this.db = new Dexie("sym");
+      this.db.version(1).stores({
+        keyValue: 'keyPath, value'
+      })
+    }
 
-  async function decompress(string) {
-    let encoder = new TextEncoder()
-    const bytes = encoder.encode(string).buffer;
-    const decompressedStream = await new Response(bytes)
-      .body.pipeThrough(new DecompressionStream('gzip'))
-    const outString = await new Response(decompressedStream).text()
+    async set(keyPath, value) {
+      const key = await this.db.keyValue.put({keyPath, value}, keyPath);
+    }
 
-    return outString;
+    async get(key) {
+      let data = await this.db.keyValue.get(key);
+      return data !== undefined ? data['value'] : '[]';
+    }
   }
+let keyValueStore = new KeyValueStore();
 </script>
 <script>
   let reset = window.location.hash.substr(1) === 'reset';
@@ -195,8 +197,7 @@
       this.historyLength = historyLength;
       this.actionSize = actionSize;
       this.replayBuffer = [];
-      this.replayBufferSize = 1600;
-      this.miniBatchSize = 800;
+      this.replayBufferSize = 3200;
       this.valueSize = 1;
       this.act = act;
 
@@ -311,9 +312,7 @@
 
     convertRawTrainingHistory() {
       this.replayBuffer.forEach(async (data) => {
-        if(Math.random() < this.miniBatchSize/this.replayBuffer.length) {
-          await actorCritic.bufferTrainingData(data.previousState, data.previousAction, data.previousReward, data.state);
-        }
+        await actorCritic.bufferTrainingData(data.previousState, data.previousAction, data.previousReward, data.state);
       })
     }
 
@@ -344,7 +343,8 @@
     }
 
     async trainModel() {
-      let epochs = 50;
+      let epochs = 100;
+      let batchSize = 64;
 
       let tfState = tf.tensor2d(
         this.trainingBuffer['tfState'],
@@ -364,6 +364,7 @@
 
       await this.actor.fit(tfState, advantages, {
         epochs: epochs,
+        batchSize: batchSize,
         callbacks: {
           onEpochEnd: onActorEpochEnd,
           earlyStopping: tf.callbacks.earlyStopping
@@ -376,6 +377,7 @@
 
       await this.critic.fit(tfState, targets, {
         epochs: epochs,
+        batchSize: batchSize,
         callbacks: {
           onEpochEnd: onCriticEpochEnd,
           earlyStopping: tf.callbacks.earlyStopping
@@ -394,13 +396,13 @@
       this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
       this.episode++;
 
-      localStorage.setItem('replayBuffer', JSON.stringify(this.replayBuffer.slice(-this.replayBufferSize)));
+      await keyValueStore.set('replayBuffer', JSON.stringify(this.replayBuffer.slice(-this.replayBufferSize)));
       localStorage.setItem('episode', this.episode);
       localStorage.setItem('averageReward', this.averageReward);
       localStorage.setItem('name', this.name);
     }
 
-    load(actorPath = 'localstorage://actor', criticPath = 'localstorage://critic') {
+    async load(actorPath = 'localstorage://actor', criticPath = 'localstorage://critic') {
       let name = localStorage.getItem('name');
       if (name != "undefined") {
         tf.loadLayersModel(actorPath).then(model => {
@@ -414,7 +416,7 @@
         });
         this.name = name;
         this.episode = localStorage.getItem('episode');
-        this.replayBuffer = JSON.parse(localStorage.getItem('replayBuffer'));
+        this.replayBuffer = JSON.parse(await keyValueStore.get('replayBuffer'));
         this.averageReward = localStorage.getItem('averageReward');
         document.getElementById('episode').innerText = this.episode;
       }
