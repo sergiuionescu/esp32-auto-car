@@ -197,7 +197,7 @@ let keyValueStore = new KeyValueStore();
       this.historyLength = historyLength;
       this.actionSize = actionSize;
       this.replayBuffer = [];
-      this.replayBufferSize = 3200;
+      this.replayBufferSize = 1200;
       this.valueSize = 1;
       this.act = act;
 
@@ -343,7 +343,7 @@ let keyValueStore = new KeyValueStore();
     }
 
     async trainModel() {
-      let epochs = 100;
+      let epochs = 50;
       let batchSize = 64;
 
       let tfState = tf.tensor2d(
@@ -396,7 +396,7 @@ let keyValueStore = new KeyValueStore();
       this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
       this.episode++;
 
-      await keyValueStore.set('replayBuffer', JSON.stringify(this.replayBuffer.slice(-this.replayBufferSize)));
+      localStorage.setItem('replayBuffer', JSON.stringify(this.replayBuffer.slice(-this.replayBufferSize)));
       localStorage.setItem('episode', this.episode);
       localStorage.setItem('averageReward', this.averageReward);
       localStorage.setItem('name', this.name);
@@ -416,7 +416,7 @@ let keyValueStore = new KeyValueStore();
         });
         this.name = name;
         this.episode = localStorage.getItem('episode');
-        this.replayBuffer = JSON.parse(await keyValueStore.get('replayBuffer'));
+        this.replayBuffer = JSON.parse(localStorage.getItem('replayBuffer'));
         this.averageReward = localStorage.getItem('averageReward');
         document.getElementById('episode').innerText = this.episode;
       }
@@ -1033,7 +1033,7 @@ let keyValueStore = new KeyValueStore();
 
       let action = actorCritic.getAction(state, actions);
       if (previousState.length > 0) {
-        actorCritic.bufferReplay(previousState, previousAction, previousReward, state);
+        actorCritic.bufferReplay(previousState, previousAction, reward, state);
       }
 
       previousState = state;
@@ -1097,9 +1097,9 @@ let keyValueStore = new KeyValueStore();
           window.location.href = window.location.href.split('#')[0];
         });
 
+      } else {
+        setTimeout(addInput, 50 / multiplier);
       }
-
-      setTimeout(addInput, 50 / multiplier);
     }
 
     addInput();
