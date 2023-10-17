@@ -1045,7 +1045,7 @@ let keyValueStore = new KeyValueStore();
         actorCritic.bufferReplay(previousState, previousAction, reward, state);
       }
 
-      previousState = state;
+      previousState = [...state];
       previousAction = action;
       previousReward = reward;
       previousSensorDistanceFM = sensorDistanceFM;
