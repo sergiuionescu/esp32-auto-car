@@ -306,7 +306,8 @@ let keyValueStore = new KeyValueStore();
 
     bufferReplay(previousState, previousAction, previousReward, state) {
       this.replayBuffer.push({previousState, previousAction, previousReward, state});
-      pushToRewardChart(this.step, previousReward, 0, 0, 0);
+      this.computeTrainingData(previousState, state, previousReward);
+
       this.step ++;
     }
 
@@ -317,6 +318,19 @@ let keyValueStore = new KeyValueStore();
     }
 
     async bufferTrainingData(state, action, reward, nextState) {
+      let {advantages, normalizedState, target, advantage} = this.computeTrainingData(state, nextState, reward);
+
+      advantages[action] = advantage;
+
+      this.trainingBuffer['tfState'].push(normalizedState);
+      this.trainingBuffer['advantages'].push(advantages);
+      this.trainingBuffer['targets'].push(target);
+
+      this.rewards.push(reward);
+      this.step++;
+    }
+
+    computeTrainingData(state, nextState, reward) {
       let advantages = new Array(this.actionSize).fill(0);
 
       let normalizedState = normalizer.normalizeFeatures(state);
@@ -332,14 +346,7 @@ let keyValueStore = new KeyValueStore();
 
       pushToRewardChart(actorCritic.step, reward, parseFloat(predictedCurrentStateValue), advantage, target);
 
-      advantages[action] = advantage;
-
-      this.trainingBuffer['tfState'].push(normalizedState);
-      this.trainingBuffer['advantages'].push(advantages);
-      this.trainingBuffer['targets'].push(target);
-
-      this.rewards.push(reward);
-      this.step++;
+      return {advantages, normalizedState, target, advantage};
     }
 
     async trainModel() {
@@ -1022,14 +1029,16 @@ let keyValueStore = new KeyValueStore();
         reward = 0;
       }
       let minVisibleDistance = Math.min(sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
-      let minDistance = Math.min(sensorDistanceBM, sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
       if (previousAction === 0 && minVisibleDistance > config.proximityThreshold) {
         reward += sensorDistanceMax;
       }
       if (previousAction === 3) {
         reward -= sensorDistanceMax/10;
       }
-      reward -= sensorDistanceMax - minDistance;
+      reward -= sensorDistanceMax - sensorDistanceBM;
+      reward -= sensorDistanceMax - sensorDistanceFM;
+      reward -= sensorDistanceMax - sensorDistanceFL;
+      reward -= sensorDistanceMax - sensorDistanceFR;
 
       let action = actorCritic.getAction(state, actions);
       if (previousState.length > 0) {
