@@ -315,7 +315,7 @@ let keyValueStore = new KeyValueStore();
     }
 
     async bufferTrainingData(state, action, reward, nextState) {
-      let {advantages, normalizedState, target, advantage} = this.computeTrainingData(state, nextState, reward);
+      let {advantages, normalizedState, target, advantage} = this.computeTrainingData(state, nextState, reward, false);
 
       advantages[action] = advantage;
 
@@ -324,10 +324,9 @@ let keyValueStore = new KeyValueStore();
       this.trainingBuffer['targets'].push(target);
 
       this.rewards.push(reward);
-      this.step++;
     }
 
-    computeTrainingData(previousState, state, reward) {
+    computeTrainingData(previousState, state, reward, chart=true) {
       let advantages = new Array(this.actionSize).fill(0);
 
       let normalizedPreviousState = normalizer.normalizeFeatures(previousState);
@@ -341,7 +340,9 @@ let keyValueStore = new KeyValueStore();
       let target = reward + config.discountFactor * predictedStateValue;
       let advantage = target - predictedPreviousStateValue;
 
-      pushToRewardChart(actorCritic.step, reward, parseFloat(predictedPreviousStateValue), parseFloat(predictedStateValue), advantage, target);
+      if(chart) {
+        pushToRewardChart(actorCritic.step, reward, parseFloat(predictedPreviousStateValue), parseFloat(predictedStateValue), advantage, target);
+      }
 
       return {advantages, normalizedState: normalizedPreviousState, target, advantage};
     }
@@ -1091,7 +1092,7 @@ let keyValueStore = new KeyValueStore();
 
         await actorCritic.trainModel();
 
-        actorCritic.save().then(function () {
+        actorCritic.save().then( () => {
           historyData['averageActorLoss'].push(
             actorCritic.getAverageActorLoss()
           );
@@ -1107,6 +1108,10 @@ let keyValueStore = new KeyValueStore();
             historyData['averageReward'].shift();
           }
           localStorage.setItem('historyData', JSON.stringify(historyData));
+
+          config.epsilon = Math.min(1, (400 - actorCritic.step) / 400 + 0.3);
+          saveConfigToStorage();
+
           window.location.href = window.location.href.split('#')[0];
         });
 
@@ -1141,6 +1146,10 @@ let keyValueStore = new KeyValueStore();
     location.reload();
   };
 
+  function saveConfigToStorage() {
+    localStorage.setItem('config', JSON.stringify(config));
+  }
+
   function saveConfig() {
     for (const key in config) {
       if (document.getElementById(key)) {
@@ -1151,7 +1160,7 @@ let keyValueStore = new KeyValueStore();
         }
       }
     }
-    localStorage.setItem('config', JSON.stringify(config));
+    saveConfigToStorage();
   }
 
   document.getElementById('save').onclick = function () {
