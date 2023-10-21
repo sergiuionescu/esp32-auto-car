@@ -74,9 +74,6 @@
           <label for="cumulativeReward" class="form-control-sm">Cumulative Reward</label>
           <input class="form-control form-control-sm" type="checkbox" id="cumulativeReward"
                  aria-describedby="Cumulate reward on each step">
-          <label for="forwardReward" class="form-control-sm">Forward Reward</label>
-          <input class="form-control form-control-sm" id="forwardReward"
-                 aria-describedby="Reward for moving forward">
           <label for="proximityThreshold" class="form-control-sm form-control-sm">Proximity Threshold</label>
           <input class="form-control form-control-sm" id="proximityThreshold"
                  aria-describedby="Sensor distance at which to apply negative reward(1-200)">
@@ -304,16 +301,16 @@ let keyValueStore = new KeyValueStore();
       return action;
     }
 
-    bufferReplay(previousState, previousAction, previousReward, state) {
-      this.replayBuffer.push({previousState, previousAction, previousReward, state});
-      this.computeTrainingData(previousState, state, previousReward);
+    bufferReplay(previousState, previousAction, reward, state) {
+      this.replayBuffer.push({previousState, previousAction, reward, state});
+      this.computeTrainingData(previousState, state, reward);
 
       this.step ++;
     }
 
     convertRawTrainingHistory() {
       this.replayBuffer.forEach(async (data) => {
-        await actorCritic.bufferTrainingData(data.previousState, data.previousAction, data.previousReward, data.state);
+        await actorCritic.bufferTrainingData(data.previousState, data.previousAction, data.reward, data.state);
       })
     }
 
@@ -330,23 +327,23 @@ let keyValueStore = new KeyValueStore();
       this.step++;
     }
 
-    computeTrainingData(state, nextState, reward) {
+    computeTrainingData(previousState, state, reward) {
       let advantages = new Array(this.actionSize).fill(0);
+
+      let normalizedPreviousState = normalizer.normalizeFeatures(previousState);
+      let tfPreviousState = tf.tensor2d(normalizedPreviousState, [1, normalizedPreviousState.length]);
+      let predictedPreviousStateValue = this.critic.predict(tfPreviousState).dataSync();
 
       let normalizedState = normalizer.normalizeFeatures(state);
       let tfState = tf.tensor2d(normalizedState, [1, normalizedState.length]);
-      let predictedCurrentStateValue = this.critic.predict(tfState).dataSync();
+      let predictedStateValue = this.critic.predict(tfState).dataSync();
 
-      let normalizedNextState = normalizer.normalizeFeatures(nextState);
-      let tfNextState = tf.tensor2d(normalizedNextState, [1, normalizedState.length]);
-      let predictedNextStateValue = this.critic.predict(tfNextState).dataSync();
+      let target = reward + config.discountFactor * predictedStateValue;
+      let advantage = target - predictedPreviousStateValue;
 
-      let target = reward + config.discountFactor * predictedNextStateValue;
-      let advantage = target - predictedCurrentStateValue;
+      pushToRewardChart(actorCritic.step, reward, parseFloat(predictedPreviousStateValue), parseFloat(predictedStateValue), advantage, target);
 
-      pushToRewardChart(actorCritic.step, reward, parseFloat(predictedCurrentStateValue), advantage, target);
-
-      return {advantages, normalizedState, target, advantage};
+      return {advantages, normalizedState: normalizedPreviousState, target, advantage};
     }
 
     async trainModel() {
@@ -455,7 +452,6 @@ let keyValueStore = new KeyValueStore();
     obstacles: 0,
     activeHistoryLength: 5,
     cumulativeReward: 0,
-    forwardReward: 1,
     proximityThreshold: 100,
     proximityPenalty: -2,
     collisionPenalty: -5,
@@ -672,7 +668,7 @@ let keyValueStore = new KeyValueStore();
             yAxisID: 'y-axis-1',
             fill: false,
             backgroundColor: "#157041",
-            borderColor: "green",
+            borderColor: "blue",
             data: []
           },
           {
@@ -680,6 +676,13 @@ let keyValueStore = new KeyValueStore();
             yAxisID: 'y-axis-1',
             fill: false,
             borderColor: "orange",
+            data: [],
+          },
+          {
+            label: 'predicted next',
+            yAxisID: 'y-axis-1',
+            fill: false,
+            borderColor: "green",
             data: [],
           },
           {
@@ -719,18 +722,20 @@ let keyValueStore = new KeyValueStore();
     });
   }
 
-  function pushToRewardChart(step, score, predicted, advantage, target) {
+  function pushToRewardChart(step, score, predicted, predictedNext, advantage, target) {
     rewardChart.data.labels.push(step);
     rewardChart.data.datasets[0].data.push(score);
     rewardChart.data.datasets[1].data.push(predicted);
-    rewardChart.data.datasets[2].data.push(advantage);
-    rewardChart.data.datasets[3].data.push(target);
+    rewardChart.data.datasets[2].data.push(predictedNext);
+    rewardChart.data.datasets[3].data.push(advantage);
+    rewardChart.data.datasets[4].data.push(target);
     if (rewardChart.data.labels.length > 50) {
       rewardChart.data.labels.shift();
       rewardChart.data.datasets[0].data.shift();
       rewardChart.data.datasets[1].data.shift();
       rewardChart.data.datasets[2].data.shift();
       rewardChart.data.datasets[3].data.shift();
+      rewardChart.data.datasets[4].data.shift();
     }
     rewardChart.update();
   }
@@ -1081,7 +1086,7 @@ let keyValueStore = new KeyValueStore();
         y: car.position.y + carWidth * Math.cos(car.angle) / 2
       }, {x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle)});
 
-      if (actorCritic.step > 400 || done) {
+      if (actorCritic.step > 400 || done || reward < -10000) {
         actorCritic.convertRawTrainingHistory();
 
         await actorCritic.trainModel();
@@ -1129,22 +1134,17 @@ let keyValueStore = new KeyValueStore();
   }
 
   document.getElementById('save-reset').onclick = function () {
-    for (const key in config) {
-      if (document.getElementById(key)) {
-        config[key] = document.getElementById(key).value;
-      }
-    }
-    localStorage.setItem('config', JSON.stringify(config));
+    saveConfig();
     if (window.location.hash.substr(1) !== 'reset') {
       window.location = window.location + '#reset';
     }
     location.reload();
   };
 
-  document.getElementById('save').onclick = function () {
+  function saveConfig() {
     for (const key in config) {
       if (document.getElementById(key)) {
-        if(document.getElementById(key).type === 'checkbox') {
+        if (document.getElementById(key).type === 'checkbox') {
           config[key] = document.getElementById(key).checked === true ? 1 : 0;
         } else {
           config[key] = document.getElementById(key).value;
@@ -1152,6 +1152,10 @@ let keyValueStore = new KeyValueStore();
       }
     }
     localStorage.setItem('config', JSON.stringify(config));
+  }
+
+  document.getElementById('save').onclick = function () {
+    saveConfig();
     location.reload();
   }
 
