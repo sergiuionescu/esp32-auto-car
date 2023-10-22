@@ -1,0 +1,10 @@
+version: '3'
+
+services:
+  tensorflow:
+    build: .
+    container_name: tensorflow
+    volumes:
+      - ../sym/model:/srv/input
+      - ./convert.sh:/srv/convert.sh
+      - ../data/actor.tflite:/srv/output/actor.tflite

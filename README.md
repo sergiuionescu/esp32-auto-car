@@ -10,6 +10,12 @@ Allows training and downloading the trained model.
 
 https://sergiuionescu.github.io/esp32-auto-car/sym/sym.html
 
+## Exporting the tfjs model to tflite
+
+```shell
+cd converter
+docker compose run tensorflow sh convert.sh
+```
 
 ## Hardware
 ###Components
