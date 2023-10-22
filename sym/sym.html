@@ -61,11 +61,6 @@
     <div class="col">
         <h4>Environment</h4>
         <div class="form-group">
-          <label for="activeHistoryLength" class="form-control-sm">Active History Length</label>
-          <input class="form-control form-control-sm" id="activeHistoryLength"
-                 aria-describedby="The number of active features">
-        </div>
-        <div class="form-group">
           <label for="obstacles" class="form-control-sm">Obstacles</label>
           <input class="form-control form-control-sm" id="obstacles"
                  aria-describedby="The number of obstacles">
@@ -112,6 +107,11 @@
     </div>
     <div class="col">
         <h4>Model</h4>
+       <div class="form-group">
+          <label for="activeHistoryLength" class="form-control-sm">Active History Length</label>
+          <input class="form-control form-control-sm" id="activeHistoryLength"
+                 aria-describedby="The number of active features">
+        </div>
         <div class="form-group">
           <label for="hiddenUnits" class="form-control-sm">Hidden Units</label>
           <input class="form-control form-control-sm" id="hiddenUnits"
@@ -168,7 +168,6 @@ let keyValueStore = new KeyValueStore();
     'averageReward': []
   };
   let reward = 0;
-  let historyLength = 32;
 
   let wakelock;
   const canWakeLock = () => 'wakeLock' in navigator;
@@ -469,7 +468,7 @@ let keyValueStore = new KeyValueStore();
   }
   let actorCritic = new ActorCritic(
     3,
-    historyLength,
+    config.activeHistoryLength,
     4,
     window.location.hash.substr(1) === 'reset',
     window.location.hash.substr(1) === 'act',
@@ -488,15 +487,9 @@ let keyValueStore = new KeyValueStore();
     normalizeFeatures(features) {
       let normalized = [];
       features.forEach(function (feature, index) {
-        if(index >= (historyLength - config.activeHistoryLength)) {
           normalized.push(this.normalizeSensorDistance(feature[0]));
           normalized.push(this.normalizeSensorDistance(feature[1]));
           normalized.push(this.normalizeSensorDistance(feature[2]));
-        } else {
-          normalized.push(this.normalizeSensorDistance(0));
-          normalized.push(this.normalizeSensorDistance(0));
-          normalized.push(this.normalizeSensorDistance(0));
-        }
       }, this);
 
       return normalized;
@@ -822,7 +815,7 @@ let keyValueStore = new KeyValueStore();
     canvasContainer.appendChild(canvas);
     sensorsChart = new Chart(canvas, {
       type: 'bar',
-      options: {animation:false},
+      options: {animation: {duration: 0}},
       data: {
         labels: [],
         datasets: [
@@ -869,7 +862,7 @@ let keyValueStore = new KeyValueStore();
     sensorsChart.data.datasets[0].data.push(latest[0][2]);
     sensorsChart.data.datasets[1].data.push(latest[0][1]);
     sensorsChart.data.datasets[2].data.push(latest[0][0]);
-    if (sensorsChart.data.labels.length > historyLength) {
+    if (sensorsChart.data.labels.length > config.activeHistoryLength) {
       sensorsChart.data.labels.shift();
       sensorsChart.data.datasets[0].data.shift();
       sensorsChart.data.datasets[1].data.shift();
@@ -931,7 +924,7 @@ let keyValueStore = new KeyValueStore();
 
     //create the car
     let
-      carX = 100,
+      carX = 250,
       carY = 200,
       carLength = 50,
       carWidth = carLength / 5 * 3,
@@ -967,7 +960,7 @@ let keyValueStore = new KeyValueStore();
       previousSensorDistanceFM;
 
 
-    for (let i = 0; i < historyLength; i++) {
+    for (let i = 0; i < config.activeHistoryLength; i++) {
       state.push([sensorDistanceMax, sensorDistanceMax, sensorDistanceMax]);
     }
 
