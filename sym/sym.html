@@ -956,6 +956,7 @@ let keyValueStore = new KeyValueStore();
     let previousState = [],
       state = [],
       previousAction = 0,
+      actionBeforePrevious = 0,
       previousReward = 0,
       previousSensorDistanceFM;
 
@@ -1027,7 +1028,7 @@ let keyValueStore = new KeyValueStore();
         reward = 0;
       }
       let minVisibleDistance = Math.min(sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
-      if (previousAction === 0 && minVisibleDistance > config.proximityThreshold) {
+      if (previousAction === 0 && actionBeforePrevious !== 3 && minVisibleDistance > config.proximityThreshold) {
         reward += sensorDistanceMax;
       }
       if (previousAction === 3) {
@@ -1044,6 +1045,7 @@ let keyValueStore = new KeyValueStore();
       }
 
       previousState = [...state];
+      actionBeforePrevious = previousAction;
       previousAction = action;
       previousReward = reward;
       previousSensorDistanceFM = sensorDistanceFM;
