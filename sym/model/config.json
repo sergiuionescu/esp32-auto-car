@@ -2,7 +2,7 @@
   "hiddenUnits": 5,
   "obstacles": 0,
   "activeHistoryLength": 10,
-  "cumulativeReward": 0,
+  "cumulativeReward": 1,
   "forwardReward": 1,
   "proximityThreshold": 100,
   "discountFactor": 0.99,
