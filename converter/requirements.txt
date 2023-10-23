@@ -1,1 +1,1 @@
-tensorflowjs
+tensorflowjs==4.12.0
