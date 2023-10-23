@@ -1104,7 +1104,7 @@ let keyValueStore = new KeyValueStore();
           }
           localStorage.setItem('historyData', JSON.stringify(historyData));
 
-          config.epsilon = Math.min(0.7, (400 - actorCritic.step) * 0.4 / 400 + 0.3);
+          config.epsilon = Math.min(0.7, (400 - actorCritic.step) * 0.7 / 400);
           saveConfigToStorage();
 
           window.location.href = window.location.href.split('#')[0];
