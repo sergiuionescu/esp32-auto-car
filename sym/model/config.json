@@ -8,5 +8,6 @@
   "discountFactor": 0.99,
   "actorLearningRate": 0.001,
   "criticLearningRate": 0.005,
-  "epsilon": 0.7
+  "epsilon": 0.7,
+  "minEpsilon": 0.1
 }

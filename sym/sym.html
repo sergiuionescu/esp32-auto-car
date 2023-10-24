@@ -84,9 +84,14 @@
     <div class="col">
       <h4>Hyperparameters</h4>
       <div class="form-group">
+        <label for="minEpsilon" class="form-control-sm">Min Epsilon</label>
+        <input class="form-control form-control-sm" id="minEpsilon"
+               aria-describedby="minEpsilon">
+      </div>
+      <div class="form-group">
         <label for="epsilon" class="form-control-sm">Epsilon</label>
         <input class="form-control form-control-sm" id="epsilon"
-               aria-describedby="epsilon">
+               aria-describedby="epsilon" disabled="disabled">
       </div>
       <div class="form-group">
         <label for="discountFactor" class="form-control-sm">Discount Factor</label>
@@ -458,7 +463,8 @@ let keyValueStore = new KeyValueStore();
     discountFactor: 0.99,
     actorLearningRate: 0.001,
     criticLearningRate: 0.005,
-    epsilon: 0.9
+    epsilon: 0.9,
+    minEpsilon: 0.1
   }
   if (localStorage.getItem('config')) {
     let savedConfig = JSON.parse(localStorage.getItem('config'));
@@ -1104,7 +1110,7 @@ let keyValueStore = new KeyValueStore();
           }
           localStorage.setItem('historyData', JSON.stringify(historyData));
 
-          config.epsilon = Math.min(0.7, (400 - actorCritic.step) * 0.7 / 400);
+          config.epsilon = Math.max(Math.min(0.7, (400 - actorCritic.step) * 0.7 / 400), config.minEpsilon);
           saveConfigToStorage();
 
           window.location.href = window.location.href.split('#')[0];
@@ -1134,6 +1140,7 @@ let keyValueStore = new KeyValueStore();
   }
 
   document.getElementById('save-reset').onclick = function () {
+    document.getElementById('epsilon').value = 1;
     saveConfig();
     if (window.location.hash.substr(1) !== 'reset') {
       window.location = window.location + '#reset';
