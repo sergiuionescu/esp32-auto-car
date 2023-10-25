@@ -1110,7 +1110,7 @@ let keyValueStore = new KeyValueStore();
           }
           localStorage.setItem('historyData', JSON.stringify(historyData));
 
-          config.epsilon = Math.max(Math.min(0.7, (400 - actorCritic.step) * 0.7 / 400), config.minEpsilon);
+          config.epsilon = Math.max(Math.min(1, (400 - actorCritic.step) * (1 - config.minEpsilon) / 400), config.minEpsilon);
           saveConfigToStorage();
 
           window.location.href = window.location.href.split('#')[0];
