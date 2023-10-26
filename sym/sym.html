@@ -293,13 +293,13 @@ let keyValueStore = new KeyValueStore();
       });
 
       let policyFlat = policy.dataSync();
-      let weights = [parseFloat(policyFlat[0]), parseFloat(policyFlat[1]), parseFloat(policyFlat[2]), parseFloat(policyFlat[3])];
+      let weights = [parseFloat(policyFlat[0]), parseFloat(policyFlat[1]), parseFloat(policyFlat[2])];
       pushToSensorsChart(this.step, state);
       pushToWeightsChart(this.step, weights);
 
       let action = chance.weighted(actions, weights);
       if(Math.random() < this.config.epsilon) {
-        action = chance.weighted(actions, [1,1,1,1]);
+        action = chance.weighted(actions, [1,1,1]);
       }
 
       return action;
@@ -475,7 +475,7 @@ let keyValueStore = new KeyValueStore();
   let actorCritic = new ActorCritic(
     3,
     config.activeHistoryLength,
-    4,
+    3,
     window.location.hash.substr(1) === 'reset',
     window.location.hash.substr(1) === 'act',
     config
@@ -1015,7 +1015,7 @@ let keyValueStore = new KeyValueStore();
     async function addInput() {
       let done = false;
       const actions = [
-        0, 1, 2, 3
+        0, 1, 2
       ];
 
       sensorDistanceBM = colliderBM.getSensorDistance();
