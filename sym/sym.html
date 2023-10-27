@@ -61,11 +61,12 @@
     <div class="col">
         <h4>Environment</h4>
         <div class="form-group">
+          <label for="maxReplayBufferSize" class="form-control-sm">Max replay buffer size</label>
+          <input class="form-control form-control-sm" id="maxReplayBufferSize"
+                 aria-describedby="Max replay buffer size">
           <label for="obstacles" class="form-control-sm">Obstacles</label>
           <input class="form-control form-control-sm" id="obstacles"
                  aria-describedby="The number of obstacles">
-        </div>
-        <div class="form-group">
           <label for="cumulativeReward" class="form-control-sm">Cumulative Reward</label>
           <input class="form-control form-control-sm" type="checkbox" id="cumulativeReward"
                  aria-describedby="Cumulate reward on each step">
@@ -124,7 +125,6 @@
 <script src="js/matter.min.js"></script>
 <script src="js/raycast.min.js"></script>
 <script src="js/chance.min.js"></script>
-<script src="js/dexie.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0/dist/tf.min.js"></script>
 
 <script src="https://code.jquery.com/jquery-3.4.0.min.js"
@@ -388,7 +388,7 @@
       this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
       this.episode++;
 
-      let replayBufferSize = parseInt(3000000 / JSON.stringify(this.replayBuffer[0]).length);
+      let replayBufferSize = Math.min(config.maxReplayBufferSize, parseInt(3000000 / JSON.stringify(this.replayBuffer[0]).length));
       localStorage.setItem('replayBuffer', JSON.stringify(this.replayBuffer.slice(-replayBufferSize)));
       localStorage.setItem('episode', this.episode);
       localStorage.setItem('averageReward', this.averageReward);
@@ -448,7 +448,8 @@
     actorLearningRate: 0.001,
     criticLearningRate: 0.005,
     epsilon: 0.9,
-    minEpsilon: 0.1
+    minEpsilon: 0.1,
+    maxReplayBufferSize: 1800,
   }
   if (localStorage.getItem('config')) {
     let savedConfig = JSON.parse(localStorage.getItem('config'));
