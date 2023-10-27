@@ -25,7 +25,7 @@
 </head>
 
 <body>
-<div class="container">
+<div class="container w-100">
   <div class="row">
     <div class="col">
       <button class='btn disabled' id='model_name' name='model_name'><i class='fa fa-info'> Model: <i id="name"></i></i>
@@ -72,12 +72,6 @@
           <label for="proximityThreshold" class="form-control-sm form-control-sm">Proximity Threshold</label>
           <input class="form-control form-control-sm" id="proximityThreshold"
                  aria-describedby="Sensor distance at which to apply negative reward(1-200)">
-<!--          <label for="proximityPenalty" class="form-control-sm">Proximity Penalty</label>-->
-<!--          <input class="form-control form-control-sm" id="proximityPenalty"-->
-<!--                 aria-describedby="Penalty for the front sensor reporting a distance lesser than the threshold">-->
-<!--          <label for="collisionPenalty" class="form-control-sm">Collision Penalty</label>-->
-<!--          <input class="form-control form-control-sm" id="collisionPenalty"-->
-<!--                 aria-describedby="Penalty for colliding with a wall or box">-->
         </div>
 
     </div>
@@ -145,24 +139,14 @@
     src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script>
-  class KeyValueStore {
-    constructor() {
-      this.db = new Dexie("sym");
-      this.db.version(1).stores({
-        keyValue: 'keyPath, value'
-      })
-    }
-
-    async set(keyPath, value) {
-      const key = await this.db.keyValue.put({keyPath, value}, keyPath);
-    }
-
-    async get(key) {
-      let data = await this.db.keyValue.get(key);
-      return data !== undefined ? data['value'] : '[]';
-    }
+  let localStorageSize = 0;
+  for(var key in window.localStorage){
+      if(window.localStorage.hasOwnProperty(key)){
+          localStorageSize += window.localStorage[key].length;
+      }
   }
-let keyValueStore = new KeyValueStore();
+
+  console.log('Using ' + localStorageSize/1024/1024 + ' MB of localStorage space.');
 </script>
 <script>
   let reset = window.location.hash.substr(1) === 'reset';
@@ -198,7 +182,6 @@ let keyValueStore = new KeyValueStore();
       this.historyLength = historyLength;
       this.actionSize = actionSize;
       this.replayBuffer = [];
-      this.replayBufferSize = 800;
       this.valueSize = 1;
       this.act = act;
 
@@ -306,7 +289,7 @@ let keyValueStore = new KeyValueStore();
     }
 
     bufferReplay(previousState, previousAction, reward, state) {
-      this.replayBuffer.push({previousState, previousAction, reward, state});
+      this.replayBuffer.push({'ps': previousState, 'pa': previousAction, 'r': reward, 's': state});
       this.computeTrainingData(previousState, state, reward);
 
       this.step ++;
@@ -314,7 +297,7 @@ let keyValueStore = new KeyValueStore();
 
     convertRawTrainingHistory() {
       this.replayBuffer.forEach(async (data) => {
-        await actorCritic.bufferTrainingData(data.previousState, data.previousAction, data.reward, data.state);
+        await actorCritic.bufferTrainingData(data.ps, data.pa, data.r, data.s);
       })
     }
 
@@ -405,7 +388,8 @@ let keyValueStore = new KeyValueStore();
       this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
       this.episode++;
 
-      localStorage.setItem('replayBuffer', JSON.stringify(this.replayBuffer.slice(-this.replayBufferSize)));
+      let replayBufferSize = parseInt(3000000 / JSON.stringify(this.replayBuffer[0]).length);
+      localStorage.setItem('replayBuffer', JSON.stringify(this.replayBuffer.slice(-replayBufferSize)));
       localStorage.setItem('episode', this.episode);
       localStorage.setItem('averageReward', this.averageReward);
       localStorage.setItem('name', this.name);
@@ -514,24 +498,24 @@ let keyValueStore = new KeyValueStore();
     listen() {
       var instance = this;
       $('body').on('keydown', function (e) {
-        if (e.which === 37) {
+        if (e.which === 65) {
           instance.leftKeyPressed = true;
-        } else if (e.which === 39) {
+        } else if (e.which === 68) {
           instance.rightKeyPressed = true;
-        } else if (e.which === 38) {
+        } else if (e.which === 87) {
           instance.forwardKeyPressed = true;
-        } else if (e.which === 40) {
+        } else if (e.which === 83) {
           instance.backKeyPressed = true;
         }
       });
       $('body').on('keyup', function (e) {
-        if (e.which === 37) {
+        if (e.which === 65) {
           instance.leftKeyPressed = false;
-        } else if (e.which === 39) {
+        } else if (e.which === 68) {
           instance.rightKeyPressed = false;
-        } else if (e.which === 38) {
+        } else if (e.which === 87) {
           instance.forwardKeyPressed = false;
-        } else if (e.which === 40) {
+        } else if (e.which === 83) {
           instance.backKeyPressed = false;
         }
       });
@@ -1018,10 +1002,10 @@ let keyValueStore = new KeyValueStore();
         0, 1, 2
       ];
 
-      sensorDistanceBM = colliderBM.getSensorDistance();
-      sensorDistanceFM = colliderFM.getSensorDistance();
-      sensorDistanceFL = colliderFL.getSensorDistance();
-      sensorDistanceFR = colliderFR.getSensorDistance();
+      sensorDistanceBM = parseInt(colliderBM.getSensorDistance());
+      sensorDistanceFM = parseInt(colliderFM.getSensorDistance());
+      sensorDistanceFL = parseInt(colliderFL.getSensorDistance());
+      sensorDistanceFR = parseInt(colliderFR.getSensorDistance());
 
       state.push([
         sensorDistanceFL,
@@ -1047,7 +1031,7 @@ let keyValueStore = new KeyValueStore();
 
       let action = actorCritic.getAction(state, actions);
       if (previousState.length > 0) {
-        actorCritic.bufferReplay(previousState, previousAction, reward, state);
+        actorCritic.bufferReplay([...previousState], previousAction, reward, [...state]);
       }
 
       previousState = [...state];
