@@ -6,10 +6,26 @@
 #include "MPU9250.h"
 #include "MadgwickAHRS.h"
 #include "SPIFFS.h"
+#include "EloquentTinyML.h"
+#include "eloquent_tinyml/tensorflow.h"
+#include "model_data.h"
 
 #ifndef max
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #endif
+
+#define N_INPUTS 30
+#define N_OUTPUTS 4
+#define TENSOR_ARENA_SIZE 2*1024
+#define AI_ACTION_FORWARD 0
+#define AI_ACTION_RIGHT 1
+#define AI_ACTION_LEFT 2
+#define AI_ACTION_BACK 3
+#define AI_MODE_OFF 0
+#define AI_MODE_ASSIST 1
+#define AI_MODE_AUTO 2
+
+Eloquent::TinyML::TensorFlow::TensorFlow<N_INPUTS, N_OUTPUTS, TENSOR_ARENA_SIZE> tf;
 
 const int onBoardLed = 2;
 
@@ -86,6 +102,11 @@ unsigned long distanceTimeMs;
 unsigned long pwmTimeMs;
 unsigned long mpuTimeMs;
 unsigned long iddleDirectionTimeMs;
+unsigned long aiActionTimeMs;
+
+float input[N_INPUTS] = {};
+int aiAction = 0;
+int aiMode = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -133,12 +154,8 @@ void setup() {
 
   server.on("/", HTTP_GET, handleIndex);
   server.on("/joy.min.js", handleJoystick);
-  server.on("/actor.json", handleActor);
-  server.on("/actor.weights.bin", handleActorWeights);
-  server.on("/chance.min.js", handleChance);
   server.on("/font-awesome.min.css", handleFont);
   server.on("/fonts/fontawesome-webfont.woff2", handleFontWoff);
-  server.on("/tf.2.0.1.min.js", handleTf);
 
   server.on("/login", handleLogin);
   server.on("/scan", handleScan);
@@ -165,6 +182,18 @@ void setup() {
 
   MadgwickFilter.begin(111); // Hz
 
+  tf.begin(model_data);
+  // check if model loaded fine
+  if (!tf.isOk()) {
+      Serial.print("ERROR: ");
+      Serial.println(tf.getErrorMessage());
+      
+      while (true) delay(1000);
+  }
+  for(int i=0; i<N_INPUTS; i++) {
+    input[i] = 1;
+  }
+
   logToSerial("Setup done");
 
   digitalWrite(onBoardLed,HIGH);
@@ -180,6 +209,8 @@ void loop() {
   delay(5);
   unsigned long loopStartTimeMs = millis();
   unsigned long carrierTimeMs = millis();
+
+ 
   if(loopMs > 0) {
     loopTimeMs = loopStartTimeMs - loopMs;
   }
@@ -187,6 +218,9 @@ void loop() {
 
   updateDistance();
   distanceTimeMs = millis() -  carrierTimeMs;
+  carrierTimeMs = millis();
+  getAiAction();
+  aiActionTimeMs = millis() - carrierTimeMs;
   carrierTimeMs = millis();
   updatePWM();
   pwmTimeMs = millis() -  carrierTimeMs;
@@ -230,7 +264,7 @@ void handleTf(AsyncWebServerRequest *request) {
 
 void sendToWs() {
   String message;
-  const size_t capacity = 3*JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(23);
+  const size_t capacity = 3*JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(24);
   DynamicJsonDocument doc(capacity);
 
   JsonObject data = doc.createNestedObject("data");
@@ -262,6 +296,7 @@ void sendToWs() {
   data["pwmTimeMs"] = pwmTimeMs;
   data["mpuTimeMs"] = mpuTimeMs;
   data["signalStrength"] = WiFi.RSSI();
+  data["aiActionTimeMs"] = aiActionTimeMs;
 
   serializeJson(doc, message);
 
@@ -309,21 +344,17 @@ void updateDistance() {
   } else {
     distanceFM = 200;
   }
-//  logToSerial("Sensors Done");
+  pushToInputBuffer(distanceFL, distanceFM, distanceFR);
 }
 
 void updatePWM(){
     motorRight.value = motorRightReference;
     motorLeft.value = motorLeftReference;
     bool distanceThreshold = false;
-    bool avoidAtAllCost = false;
+   
 
     if(distanceFL <= 30 || distanceFM <= 30 || distanceFR <= 30) {
       distanceThreshold = true;
-    }
-
-    if(motorRight.value > 0 && motorLeft.value > 0 && distanceThreshold) {
-      avoidAtAllCost = true;
     }
 
     if(distanceThreshold) {
@@ -331,14 +362,19 @@ void updatePWM(){
     } else {
       digitalWrite(onBoardLed,LOW);
     }
-    avoidAtAllCost = false;
 
-   if(avoidAtAllCost) {
-      if(distanceFL < distanceFR) {
+   if((aiMode == AI_MODE_ASSIST && distanceThreshold) || aiMode == AI_MODE_AUTO) {
+      if(aiAction == AI_ACTION_FORWARD) {
+        motorRight.value = 220;
+        motorLeft.value = 220;
+      } else if(aiAction == AI_ACTION_RIGHT) {
         motorRight.value = -220;
         motorLeft.value = 220;
-      } else {
+      } else if(aiAction == AI_ACTION_LEFT) {
         motorRight.value = 220;
+        motorLeft.value = -220;
+      } else if(aiAction == AI_ACTION_BACK) {
+        motorRight.value = -220;
         motorLeft.value = -220;
       }
     } 
@@ -472,6 +508,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
 
     motorRightReference = (int)doc["right"];
     motorLeftReference = (int)doc["left"];
+    aiMode = (int)doc["mode"];
   }
 }
 
@@ -504,6 +541,44 @@ void readMPU() {
   roll = MadgwickFilter.getRoll();
   pitch = MadgwickFilter.getPitch();
 
+}
+
+float normalizeInput(int distance) {
+  float result = round((float) distance/10.0);
+
+  return result/20.0;
+}
+
+void pushToInputBuffer(int distanceFL, int distanceFM, int distanceFR) {
+  for(int i=0; i<N_INPUTS-3; i++) {
+    input[i] = input[i+3];
+  }
+
+  input[N_INPUTS-3] = normalizeInput(distanceFL);
+  input[N_INPUTS-2] = normalizeInput(distanceFM);
+  input[N_INPUTS-1] = normalizeInput(distanceFR);
+}
+
+int getRandomProbs(float values[N_OUTPUTS]) {
+  float rnd = esp_random() / UINT32_MAX;
+  float carry = 0;
+  int i;
+  
+  for(i=0;i<=N_OUTPUTS;i++) {
+    if(rnd<carry + values[i]) {
+      return i;
+    }
+    carry += values[i];
+  }
+  
+  return i;
+}
+
+void getAiAction() {
+  float output[N_INPUTS] = {};
+  tf.predict(input, output);
+
+  aiAction = getRandomProbs(output);
 }
 
 void logToSerial(const String message) {

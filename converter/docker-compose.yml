@@ -7,4 +7,6 @@ services:
     volumes:
       - ../sym/model:/srv/input
       - ./convert.sh:/srv/convert.sh
+      - ./convert.py:/srv/convert.py
+      - ../model_data.h:/srv/output/model_data.h
       - ../data/actor.tflite:/srv/output/actor.tflite

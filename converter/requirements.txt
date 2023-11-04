@@ -1,1 +1,2 @@
 tensorflowjs==4.12.0
+tinymlgen==0.2
