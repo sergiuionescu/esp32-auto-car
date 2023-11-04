@@ -18,7 +18,7 @@ docker compose run tensorflow sh convert.sh
 ```
 
 ## Hardware
-###Components
+### Components
 
 - Logic board: 1xESP32 (Plusivo)
 - Motor controller: 1xTB6612FNG
@@ -29,7 +29,7 @@ docker compose run tensorflow sh convert.sh
 - 2x5V motors
 - MPU9250
 
-###Circuit connection
+### Circuit connection
 
 | ESP32 | TB6612FNG | HC-SRO4 FR | HC-SRO4 FL | HC-SRO4 FM | MPU9250 | Motor Left | Motor Right |
 |-------|------------|------------|------------|------------|---------|------------|-------------|
