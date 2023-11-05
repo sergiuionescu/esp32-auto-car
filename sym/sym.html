@@ -138,6 +138,7 @@
 <script
     src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
+<script src="js/perception.chart.js"></script>
 <script>
   let localStorageSize = 0;
   for(var key in window.localStorage){
@@ -271,16 +272,17 @@
     }
 
     getAction(state, actions) {
-      let policy = this.actor.predict(tf.tensor2d(normalizer.normalizeFeatures(state), [1, state.length * state[0].length]), {
+      let normalizeFeatures = normalizer.normalizeFeatures(state);
+      let policy = this.actor.predict(tf.tensor2d(normalizeFeatures, [1, state.length * state[0].length]), {
         batchSize: 1,
       });
 
       let policyFlat = policy.dataSync();
       let weights = [parseFloat(policyFlat[0]), parseFloat(policyFlat[1]), parseFloat(policyFlat[2])];
-      pushToSensorsChart(this.step, state);
       pushToWeightsChart(this.step, weights);
 
       let action = chance.weighted(actions, weights);
+      perceptionChart.update(normalizeFeatures, action);
       if(Math.random() < this.config.epsilon) {
         action = chance.weighted(actions, [1,1,1]);
       }
@@ -799,74 +801,10 @@
   }
 </script>
 <script>
-  function createSensorsChart() {
-    var canvasContainer = document.getElementById('sensors');
-    var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 350;
-    canvasContainer.appendChild(canvas);
-    sensorsChart = new Chart(canvas, {
-      type: 'bar',
-      options: {animation: {duration: 0}},
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: 'FR',
-            fill: false,
-            backgroundColor: "#1238c1",
-            data: []
-          },
-          {
-            label: 'FM',
-            fill: false,
-            backgroundColor: "#16A085",
-            data: []
-          },
-          {
-            label: 'FL',
-            fill: false,
-            backgroundColor: "#E74C3C",
-            data: []
-          }
-        ]
-      },
-      options: {
-        title: {
-          display: true,
-          text: 'Sensors'
-        },
-        scales: {
-          xAxes: [{
-            stacked: true,
-          }],
-          yAxes: [{
-            stacked: true
-          }]
-        }
-      }
-    });
-  }
-
-  function pushToSensorsChart(step, state) {
-    let latest = state.slice(-1);
-    sensorsChart.data.labels.push(step);
-    sensorsChart.data.datasets[0].data.push(latest[0][2]);
-    sensorsChart.data.datasets[1].data.push(latest[0][1]);
-    sensorsChart.data.datasets[2].data.push(latest[0][0]);
-    if (sensorsChart.data.labels.length > config.activeHistoryLength) {
-      sensorsChart.data.labels.shift();
-      sensorsChart.data.datasets[0].data.shift();
-      sensorsChart.data.datasets[1].data.shift();
-      sensorsChart.data.datasets[2].data.shift();
-    }
-    sensorsChart.update();
-  }
-
-  createSensorsChart();
+  let perceptionChart = new PerceptionChart('sensors', 350, 120);
 </script>
 <script>
-  var sensorsChart,
-    historyChart,
+  var historyChart,
     rewardChart,
     weightsChart;
   latest_loss = 1;

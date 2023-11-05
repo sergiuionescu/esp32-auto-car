@@ -38,7 +38,7 @@ const int trigPinFL = 32;
 const int echoPinFR = 5;
 const int trigPinFR = 4;
 
-const int pulseTimeout = 4000;
+const int pulseTimeout = 8000;
 
 const char* ssid     = "ESP32";
 const char* password = "987654321";
