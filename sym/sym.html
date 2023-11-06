@@ -958,7 +958,7 @@
         reward = 0;
       }
       let minVisibleDistance = Math.min(sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
-      if(previousMinDistance < minVisibleDistance && minVisibleDistance === sensorDistanceMax) {
+      if(previousMinDistance < minVisibleDistance && minVisibleDistance > config.proximityThreshold) {
         reward = Math.max(0, reward);
       }
       if (previousAction === 0 && actionBeforePrevious !== 3 && minVisibleDistance > config.proximityThreshold) {
