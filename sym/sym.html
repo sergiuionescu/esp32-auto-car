@@ -887,7 +887,8 @@
       previousAction = 0,
       actionBeforePrevious = 0,
       previousReward = 0,
-      previousSensorDistanceFM;
+      maxReward = 0, 
+      previousMinDistance;
 
 
     for (let i = 0; i < config.activeHistoryLength; i++) {
@@ -957,6 +958,9 @@
         reward = 0;
       }
       let minVisibleDistance = Math.min(sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
+      if(previousMinDistance < minVisibleDistance && minVisibleDistance === sensorDistanceMax) {
+        reward = Math.max(0, reward);
+      }
       if (previousAction === 0 && actionBeforePrevious !== 3 && minVisibleDistance > config.proximityThreshold) {
         reward += sensorDistanceMax;
       }
@@ -968,6 +972,10 @@
       reward -= sensorDistanceMax - sensorDistanceFL;
       reward -= sensorDistanceMax - sensorDistanceFR;
 
+      if(reward > maxReward) {
+        maxReward = reward;
+      }
+
       let action = actorCritic.getAction(state, actions);
       if (previousState.length > 0) {
         actorCritic.bufferReplay([...previousState], previousAction, reward, [...state]);
@@ -977,7 +985,7 @@
       actionBeforePrevious = previousAction;
       previousAction = action;
       previousReward = reward;
-      previousSensorDistanceFM = sensorDistanceFM;
+      previousMinDistance = minVisibleDistance;
 
       let leftSpeed = 0;
       let rightSpeed = 0;
