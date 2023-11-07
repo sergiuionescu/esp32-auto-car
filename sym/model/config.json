@@ -1,13 +1,12 @@
 {
-  "hiddenUnits": 5,
+  "hiddenUnits": 32,
   "obstacles": 0,
   "activeHistoryLength": 10,
-  "cumulativeReward": 1,
-  "forwardReward": 1,
-  "proximityThreshold": 100,
-  "discountFactor": 0.99,
+  "cumulativeReward": 0,
+  "proximityThreshold": 190,
+  "discountFactor": 0,
   "actorLearningRate": 0.001,
   "criticLearningRate": 0.005,
-  "epsilon": 0.7,
-  "minEpsilon": 0.1
+  "epsilon": 1,
+  "minEpsilon": 0.3
 }
