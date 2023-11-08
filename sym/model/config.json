@@ -8,5 +8,7 @@
   "actorLearningRate": 0.001,
   "criticLearningRate": 0.005,
   "epsilon": 1,
-  "minEpsilon": 0.3
+  "minEpsilon": 0.3,
+  "name": "v1",
+  "episode": 280
 }
