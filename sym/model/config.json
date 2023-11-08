@@ -1,14 +1,14 @@
 {
   "hiddenUnits": 32,
-  "obstacles": 0,
+  "obstacles": 15,
   "activeHistoryLength": 10,
   "cumulativeReward": 0,
   "proximityThreshold": 190,
   "discountFactor": 0,
   "actorLearningRate": 0.001,
   "criticLearningRate": 0.005,
-  "epsilon": 1,
-  "minEpsilon": 0.3,
+  "epsilon": 0,
+  "minEpsilon": 0,
   "name": "v1",
   "episode": 280
 }
