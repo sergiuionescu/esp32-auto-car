@@ -20,12 +20,14 @@
 
       .container {
           width: 100%;
+          margin: 0;
+          max-width: 100%;
       }
   </style>
 </head>
 
 <body>
-<div class="container w-100">
+<div class="container">
   <div class="row">
     <div class="col">
       <button class='btn disabled' id='model_name' name='model_name'><i class='fa fa-info'> Model: <i id="name"></i></i>
@@ -37,24 +39,13 @@
   </div>
   <div class="row">
     <div class="col">
-      <div id="reward-chart">
-      </div>
-      <div id="training-history-container">
-      </div>
-
+      <div id="environment" style="min-width: 1000px;"></div>
     </div>
-    <div class="col">
-      <div id="weights">
-      </div>
-       <div id="sensors">
-      </div>
-    </div>
-  </div>
-  <div class="row">
-    <div class="col">
-      <div id="environment"></div>
-    </div>
-    <div class="col">
+    <div class="col-sm" style="width: 350px;">
+      <div id="reward-chart"></div>
+      <div id="training-history-container"></div>
+      <div id="weights"></div>
+      <div id="sensors" style="width: 350px;"></div>
     </div>
   </div>
   <div class="row">
@@ -834,7 +825,7 @@
 
     // create a renderer
     let environmentWidth = 1000;
-    let environmentHeight = 450;
+    let environmentHeight = 700;
     let render = Render.create({
       element: document.getElementById('environment'),
       engine: engine,
