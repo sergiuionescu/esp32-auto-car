@@ -397,7 +397,7 @@
     async load(actorPath = 'localstorage://actor', criticPath = 'localstorage://critic', fromLocalStorage = true) {
       let name = fromLocalStorage ? (localStorage.getItem('name') ?? this.name) : config.name ;
 
-      if(!fromLocalStorage || localStorage.getItem(actorPath)) {
+      if(!fromLocalStorage || localStorage.getItem('name')) {
         tf.loadLayersModel(actorPath).then(model => {
           this.compile(model, config.actorLearningRate, this.customActorLoss);
           this.actor = model;
@@ -440,7 +440,7 @@
   let config = {
     hiddenUnits: 32,
     obstacles: 0,
-    activeHistoryLength: 5,
+    activeHistoryLength: 10,
     cumulativeReward: 0,
     proximityThreshold: 100,
     proximityPenalty: -2,
