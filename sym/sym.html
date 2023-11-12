@@ -130,6 +130,8 @@
     src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script src="js/perception.chart.js"></script>
+<script src="js/car.js"></script>
+<script src="js/actor.crific.js"></script>
 <script>
   let localStorageSize = 0;
   for(var key in window.localStorage){
@@ -173,270 +175,6 @@
   lockWakeState();
 </script>
 <script>
-  class ActorCritic {
-    constructor(featureCount, historyLength, actionSize, reset, act, config) {
-      this.render = false;
-      this.featureCount = featureCount;
-      this.historyLength = historyLength;
-      this.actionSize = actionSize;
-      this.replayBuffer = [];
-      this.valueSize = 1;
-      this.act = act;
-
-      this.episode = 0;
-      this.averageReward = 0;
-
-      this.config = config;
-
-      if (!reset) {
-        this.load();
-      }
-
-      this.commonLayer = tf.layers.dense({
-        units: parseInt(this.config.hiddenUnits),
-        activation: 'relu',
-        kernelInitializer: 'glorotUniform',
-      });
-      this.actor = this.actor ?? this.buildActor();
-      this.critic = this.critic ?? this.buildCritic();
-      this.name = this.name ?? new Date().toLocaleString('en-in');
-      this.trainingBuffer = {
-        'tfState': [],
-        'advantages': [],
-        'targets': []
-      };
-
-
-      this.step = 0;
-      this.latestActorLoss = 0;
-      this.latestCriticLoss = 0;
-
-      this.actorLosses = [];
-      this.criticLosses = [];
-      this.rewards = [];
-    }
-
-    customActorLoss(logProb, advantages) {
-      return tf.tidy(() => {
-        // Multiply the log probability by the advantages
-        const loss = tf.mul(logProb, advantages);
-
-        // Take the negative of the mean (since we want to maximize expected returns)
-        return tf.neg(tf.mean(loss));
-      });
-    }
-
-    buildActor() {
-      const model = tf.sequential();
-      model.add(tf.layers.inputLayer({inputShape: [this.historyLength * this.featureCount],}));
-
-      model.add(this.commonLayer);
-
-      model.add(tf.layers.dense({
-        units: this.actionSize,
-        activation: 'softmax',
-        kernelInitializer: 'glorotUniform',
-      }));
-
-      this.compile(model, config.actorLearningRate, this.customActorLoss);
-
-      return model;
-    }
-
-    buildCritic() {
-      const model = tf.sequential();
-
-      model.add(tf.layers.inputLayer({inputShape: [this.historyLength * this.featureCount],}));
-
-      model.add(this.commonLayer);
-
-      model.add(tf.layers.dense({
-        units: this.valueSize,
-        activation: 'linear',
-        kernelInitializer: 'glorotUniform',
-      }));
-
-      this.compile(model, config.criticLearningRate, tf.losses.huberLoss);
-
-      return model;
-    }
-
-    compile(model, learningRate, loss) {
-      model.compile({
-        optimizer: tf.train.adam(learningRate),
-        loss: loss,
-      });
-    }
-
-    getAction(state, actions) {
-      let normalizeFeatures = normalizer.normalizeFeatures(state);
-      let policy = this.actor.predict(tf.tensor2d(normalizeFeatures, [1, state.length * state[0].length]), {
-        batchSize: 1,
-      });
-
-      let policyFlat = policy.dataSync();
-      let weights = [parseFloat(policyFlat[ACTION_FORWARD]), parseFloat(policyFlat[ACTION_RIGHT]), parseFloat(policyFlat[ACTION_LEFT])];
-      pushToWeightsChart(this.step, weights);
-
-      let action = chance.weighted(actions, weights);
-      perceptionChart.update(normalizeFeatures, action);
-      if(Math.random() < this.config.epsilon) {
-        action = chance.weighted(actions, [1,1,1]);
-      }
-
-      return action;
-    }
-
-    bufferReplay(previousState, previousAction, reward, state) {
-      this.replayBuffer.push({'ps': previousState, 'pa': previousAction, 'r': reward, 's': state});
-      this.computeTrainingData(previousState, state, reward);
-
-      this.step ++;
-    }
-
-    convertRawTrainingHistory() {
-      this.replayBuffer.forEach(async (data) => {
-        await actorCritic.bufferTrainingData(data.ps, data.pa, data.r, data.s);
-      })
-    }
-
-    async bufferTrainingData(state, action, reward, nextState) {
-      let {advantages, normalizedState, target, advantage} = this.computeTrainingData(state, nextState, reward, false);
-
-      advantages[action] = advantage;
-
-      this.trainingBuffer['tfState'].push(normalizedState);
-      this.trainingBuffer['advantages'].push(advantages);
-      this.trainingBuffer['targets'].push(target);
-
-      this.rewards.push(reward);
-    }
-
-    computeTrainingData(previousState, state, reward, chart=true) {
-      let advantages = new Array(this.actionSize).fill(0);
-
-      let normalizedPreviousState = normalizer.normalizeFeatures(previousState);
-      let tfPreviousState = tf.tensor2d(normalizedPreviousState, [1, normalizedPreviousState.length]);
-      let predictedPreviousStateValue = this.critic.predict(tfPreviousState).dataSync();
-
-      let normalizedState = normalizer.normalizeFeatures(state);
-      let tfState = tf.tensor2d(normalizedState, [1, normalizedState.length]);
-      let predictedStateValue = this.critic.predict(tfState).dataSync();
-
-      let target = reward + config.discountFactor * predictedStateValue;
-      let advantage = target - predictedPreviousStateValue;
-
-      if(chart) {
-        pushToRewardChart(actorCritic.step, reward, parseFloat(predictedPreviousStateValue), parseFloat(predictedStateValue), advantage, target);
-      }
-
-      return {advantages, normalizedState: normalizedPreviousState, target, advantage};
-    }
-
-    async trainModel() {
-      let epochs = 50;
-      let batchSize = 64;
-
-      let tfState = tf.tensor2d(
-        this.trainingBuffer['tfState'],
-        [this.trainingBuffer['tfState'].length, this.trainingBuffer['tfState'][0].length]
-      );
-      let advantages = tf.tensor(this.trainingBuffer['advantages']);
-      let targets = tf.tensor(this.trainingBuffer['targets']);
-
-      resetHistoryChart();
-      function onActorEpochEnd(batch, logs) {
-        pushToHistoryChart(logs.loss, 'actor')
-      }
-
-      function onCriticEpochEnd(batch, logs) {
-        pushToHistoryChart(logs.loss, 'critic')
-      }
-
-      await this.actor.fit(tfState, advantages, {
-        epochs: epochs,
-        batchSize: batchSize,
-        callbacks: {
-          onEpochEnd: onActorEpochEnd,
-          earlyStopping: tf.callbacks.earlyStopping
-        }
-      }).then(info => {
-          this.latestActorLoss = info.history.loss.slice(-1);
-          this.actorLosses.push(this.latestActorLoss[0]);
-        }
-      );
-
-      await this.critic.fit(tfState, targets, {
-        epochs: epochs,
-        batchSize: batchSize,
-        callbacks: {
-          onEpochEnd: onCriticEpochEnd,
-          earlyStopping: tf.callbacks.earlyStopping
-        }
-      }).then(info => {
-          this.latestCriticLoss = info.history.loss.slice(-1);
-          this.criticLosses.push(this.latestCriticLoss[0]);
-        }
-      );
-    }
-
-    async save() {
-      await this.actor.save('localstorage://actor');
-      await this.critic.save('localstorage://critic');
-
-      this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
-      this.episode++;
-
-      let replayBufferSize = Math.min(config.maxReplayBufferSize, parseInt(3000000 / JSON.stringify(this.replayBuffer[0]).length));
-      localStorage.setItem('replayBuffer', JSON.stringify(this.replayBuffer.slice(-replayBufferSize)));
-      localStorage.setItem('episode', this.episode);
-      localStorage.setItem('averageReward', this.averageReward);
-      localStorage.setItem('name', this.name);
-    }
-
-    async load(actorPath = 'localstorage://actor', criticPath = 'localstorage://critic', fromLocalStorage = true) {
-      let name = fromLocalStorage ? (localStorage.getItem('name') ?? this.name) : config.name ;
-
-      if(!fromLocalStorage || localStorage.getItem('name')) {
-        tf.loadLayersModel(actorPath).then(model => {
-          this.compile(model, config.actorLearningRate, this.customActorLoss);
-          this.actor = model;
-        });
-        tf.loadLayersModel(criticPath).then(model => {
-          model.layers[1] = this.actor.layers[1];
-          this.compile(model, config.criticLearningRate, tf.losses.huberLoss);
-          this.critic = model;
-        });
-        this.name = name;
-        this.episode = fromLocalStorage ? (localStorage.getItem('episode') ?? 0) : config.episode;
-        this.replayBuffer = JSON.parse(localStorage.getItem('replayBuffer') ?? '[]');
-        this.averageReward = localStorage.getItem('averageReward') ?? 0;
-        document.getElementById('episode').innerText = this.episode;
-        document.getElementById('name').innerHTML = this.name;
-      }
-    }
-
-    getAverageActorLoss() {
-      return this.getAverage(this.actorLosses);
-    }
-
-    getAverageCriticLoss() {
-      return this.getAverage(this.criticLosses);
-    }
-
-    getAverageReward() {
-      return this.getAverage(this.rewards);
-    }
-
-    getAverage(list) {
-      let sum = 0;
-      for (let i = 0; i < list.length; i++) {
-        sum += list[i];
-      }
-      return sum / list.length;
-    }
-  }
-
   let config = {
     hiddenUnits: 32,
     obstacles: 0,
@@ -842,45 +580,6 @@
       }
     });
 
-    let activeSensorColor = {
-        render: {
-             fillStyle: 'red',
-             strokeStyle: 'blue',
-             lineWidth: 3
-        }
-    }
-
-    //create the car
-    let
-      carX = 250,
-      carY = 200,
-      carLength = 50,
-      carWidth = carLength / 5 * 3,
-      carBody = Bodies.rectangle(carX, carY, carLength, carWidth),
-      sensorRadius = carLength / 15,
-      carWheelFL = Bodies.rectangle(carX - carLength / 2 + carLength / 3.5, carY - carWidth / 2, carLength / 3.5, carWidth / 3.5),
-      carWheelBL = Bodies.rectangle(carX + carLength / 2 - carLength / 3.5, carY - carWidth / 2, carLength / 3.5, carWidth / 3.5),
-      carWheelFR = Bodies.rectangle(carX - carLength / 2 + carLength / 3.5, carY + carWidth / 2, carLength / 3.5, carWidth / 3.5),
-      carWheelBR = Bodies.rectangle(carX + carLength / 2 - carLength / 3.5, carY + carWidth / 2, carLength / 3.5, carWidth / 3.5),
-      sensorBM = Bodies.circle(carX - carLength / 2 + carLength / 15, carY, sensorRadius),
-      sensorFM = Bodies.circle(carX + carLength / 2 - carLength / 15, carY, sensorRadius, activeSensorColor),
-      sensorFL = Bodies.circle(carX + carLength / 2 - carLength / 15, carY - carWidth / 2 + carLength * 2 / 15, sensorRadius, activeSensorColor),
-      sensorFR = Bodies.circle(carX + carLength / 2 - carLength / 15, carY + carWidth / 2 - carLength * 2 / 15, sensorRadius, activeSensorColor),
-      car = Body.create({
-        parts: [
-          carBody,
-          carWheelFL,
-          carWheelBL,
-          carWheelFR,
-          carWheelBR,
-          sensorBM,
-          sensorFM,
-          sensorFL,
-          sensorFR
-        ]
-      }),
-      collisions = 0;
-
     let previousState = [],
       state = [],
       previousAction = ACTION_FORWARD,
@@ -894,10 +593,13 @@
       state.push([sensorDistanceMax, sensorDistanceMax, sensorDistanceMax]);
     }
 
-    car.frictionAir = 0.1;
-
     // create two boxes and a ground
     let boxes = [];
+
+    // for(i=0; i<4;i++) {
+    //   let box = Bodies.rectangle(environmentWidth/2 - 400*(i%2) + 200, i*environmentHeight/4, environmentWidth, 10, {isStatic: true});
+    //   boxes.push(box);
+    // }
 
     for (i = 0; i < config.obstacles; i++) {
       let box = Bodies.polygon(300 + environmentWidth/2 * Math.random(), environmentHeight * Math.random(), parseInt(3 + 5 * Math.random()), 10 + 50 * Math.random(), {isStatic: true});
@@ -912,18 +614,14 @@
     boxes.push(wallL);
     boxes.push(wallR);
 
-    let colliderBM = new Collider(boxes, car, sensorBM, 'sensorFM', Math.PI);
-    let colliderFM = new Collider(boxes, car, sensorFM, 'sensorFM', 0);
-    let colliderFL = new Collider(boxes, car, sensorFL, 'sensorFL', -Math.PI / 6);
-    let colliderFR = new Collider(boxes, car, sensorFR, 'sensorFR', Math.PI / 6);
-
-    boxes.push(car);
+    let car = new Car(boxes);
+    boxes.push(car.carBody);
 
     // add all the bodies to the world
     World.add(engine.world, boxes);
 
     Events.on(engine, 'collisionStart', function (event) {
-      collisions++;
+      car.collisions++;
     });
     Events.on(engine, 'collisionActive', function (event) {
       reward += config.collisionPenalty;
@@ -941,10 +639,10 @@
         0, 1, 2
       ];
 
-      sensorDistanceBM = parseInt(colliderBM.getSensorDistance());
-      sensorDistanceFM = parseInt(colliderFM.getSensorDistance());
-      sensorDistanceFL = parseInt(colliderFL.getSensorDistance());
-      sensorDistanceFR = parseInt(colliderFR.getSensorDistance());
+      sensorDistanceBM = parseInt(car.colliderBM.getSensorDistance());
+      sensorDistanceFM = parseInt(car.colliderFM.getSensorDistance());
+      sensorDistanceFL = parseInt(car.colliderFL.getSensorDistance());
+      sensorDistanceFR = parseInt(car.colliderFR.getSensorDistance());
 
       state.push([
         sensorDistanceFL,
@@ -1009,14 +707,14 @@
       leftForce = leftSpeed / 40000 * multiplier;
       rightForce = rightSpeed / 40000 * multiplier;
 
-      Body.applyForce(car, {
-        x: car.position.x + carLength * Math.sin(car.angle) / 2,
-        y: car.position.y - carWidth * Math.cos(car.angle) / 2
-      }, {x: leftForce * Math.cos(car.angle), y: leftForce * Math.sin(car.angle)});
-      Body.applyForce(car, {
-        x: car.position.x - carLength * Math.sin(car.angle) / 2,
-        y: car.position.y + carWidth * Math.cos(car.angle) / 2
-      }, {x: rightForce * Math.cos(car.angle), y: rightForce * Math.sin(car.angle)});
+      Body.applyForce(car.carBody, {
+        x: car.carBody.position.x + car.carLength * Math.sin(car.carBody.angle) / 2,
+        y: car.carBody.position.y - car.carWidth * Math.cos(car.carBody.angle) / 2
+      }, {x: leftForce * Math.cos(car.carBody.angle), y: leftForce * Math.sin(car.carBody.angle)});
+      Body.applyForce(car.carBody, {
+        x: car.carBody.position.x - car.carLength * Math.sin(car.carBody.angle) / 2,
+        y: car.carBody.position.y +car. carWidth * Math.cos(car.carBody.angle) / 2
+      }, {x: rightForce * Math.cos(car.carBody.angle), y: rightForce * Math.sin(car.carBody.angle)});
 
       if (actorCritic.step > 400 || done || reward < -10000) {
         actorCritic.convertRawTrainingHistory();
