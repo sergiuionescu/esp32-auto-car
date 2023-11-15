@@ -684,37 +684,7 @@
       previousReward = reward;
       previousMinDistance = minVisibleDistance;
 
-      let leftSpeed = 0;
-      let rightSpeed = 0;
-      switch (action) {
-        case ACTION_FORWARD:
-          leftSpeed = 200;
-          rightSpeed = 200;
-          break;
-        case ACTION_RIGHT:
-          leftSpeed = 200;
-          rightSpeed = -200;
-          break;
-        case ACTION_LEFT:
-          leftSpeed = -200;
-          rightSpeed = 200;
-          break;
-        case ACTION_BACK:
-          leftSpeed = -200;
-          rightSpeed = -200;
-      }
-
-      leftForce = leftSpeed / 40000 * multiplier;
-      rightForce = rightSpeed / 40000 * multiplier;
-
-      Body.applyForce(car.carBody, {
-        x: car.carBody.position.x + car.carLength * Math.sin(car.carBody.angle) / 2,
-        y: car.carBody.position.y - car.carWidth * Math.cos(car.carBody.angle) / 2
-      }, {x: leftForce * Math.cos(car.carBody.angle), y: leftForce * Math.sin(car.carBody.angle)});
-      Body.applyForce(car.carBody, {
-        x: car.carBody.position.x - car.carLength * Math.sin(car.carBody.angle) / 2,
-        y: car.carBody.position.y +car. carWidth * Math.cos(car.carBody.angle) / 2
-      }, {x: rightForce * Math.cos(car.carBody.angle), y: rightForce * Math.sin(car.carBody.angle)});
+      car.act(action);
 
       if (actorCritic.step > 400 || done || reward < -10000) {
         actorCritic.convertRawTrainingHistory();
