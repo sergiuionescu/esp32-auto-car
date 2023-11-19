@@ -28,10 +28,10 @@ class Car {
     });
     this.carBody.frictionAir = 0.1
 
-    this.colliderBM = new Collider(collisionBoxes, this.carBody, sensorBM, 'sensorFM', Math.PI);
-    this.colliderFM = new Collider(collisionBoxes, this.carBody, sensorFM, 'sensorFM', 0);
-    this.colliderFL = new Collider(collisionBoxes, this.carBody, sensorFL, 'sensorFL', -Math.PI / 6);
-    this.colliderFR = new Collider(collisionBoxes, this.carBody, sensorFR, 'sensorFR', Math.PI / 6);
+    this.colliderBM = new Collider(collisionBoxes, this.carBody, sensorBM, 'sensorFM', Math.PI, 100);
+    this.colliderFM = new Collider(collisionBoxes, this.carBody, sensorFM, 'sensorFM', 0, 100);
+    this.colliderFL = new Collider(collisionBoxes, this.carBody, sensorFL, 'sensorFL', -Math.PI / 6, 100);
+    this.colliderFR = new Collider(collisionBoxes, this.carBody, sensorFR, 'sensorFR', Math.PI / 6, 100);
   }
 
   act(action) {

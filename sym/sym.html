@@ -130,6 +130,8 @@
     src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script src="js/perception.chart.js"></script>
+<script src="js/collider.js"></script>
+<script src="js/normalizer.js"></script>
 <script src="js/car.js"></script>
 <script src="js/actor.crific.js"></script>
 <script>
@@ -196,6 +198,7 @@
       config[key] = parseFloat(savedConfig[key]);
     }
   }
+  let normalizer = new Normalizer(10);
   let actorCritic = new ActorCritic(
     3,
     config.activeHistoryLength,
@@ -206,27 +209,6 @@
   );
   document.getElementById("name").innerHTML = actorCritic.name;
 
-</script>
-<script>
-  class Normalizer {
-    normalizeSensorDistance(sensorDistance) {
-      sensorDistance = Math.round(sensorDistance / 10);
-      return sensorDistance / 20;
-    }
-
-    normalizeFeatures(features) {
-      let normalized = [];
-      features.forEach(function (feature, index) {
-          normalized.push(this.normalizeSensorDistance(feature[0]));
-          normalized.push(this.normalizeSensorDistance(feature[1]));
-          normalized.push(this.normalizeSensorDistance(feature[2]));
-      }, this);
-
-      return normalized;
-    }
-  }
-
-  normalizer = new Normalizer();
 </script>
 <script>
   class InputListener {
@@ -264,35 +246,6 @@
 
   listener = new InputListener();
   listener.listen();
-</script>
-<script>
-  class Collider {
-    constructor(boxes, car, sensor, name, angleOffset) {
-      this.boxes = boxes.slice();
-      this.car = car;
-      this.sensor = sensor;
-      this.name = name;
-      this.angleOffset = angleOffset;
-    }
-
-    getSensorDistance() {
-      let sensorDistance = 200;
-
-      let raycastCollisions = raycast(this.boxes, this.sensor.position,
-        {
-          x: this.sensor.position.x + sensorDistance * Math.cos(this.car.angle + this.angleOffset),
-          y: this.sensor.position.y + sensorDistance * Math.sin(this.car.angle + this.angleOffset)
-        }
-      );
-      if (raycastCollisions.length > 0) {
-        let firstHit = raycastCollisions[0];
-        sensorDistance = Math.sqrt(Math.pow(this.sensor.position.x - firstHit.point.x, 2)
-          + Math.pow(this.sensor.position.y - firstHit.point.y, 2));
-      }
-      // console.log(this.name + ':' + sensorDistance);
-      return sensorDistance;
-    }
-  }
 </script>
 
 <script>
@@ -553,8 +506,7 @@
       World = Matter.World,
       Events = Matter.Events,
       Bodies = Matter.Bodies,
-      Body = Matter.Body,
-      sensorDistanceBM = sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 200,
+      sensorDistanceBM = sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 100,
       multiplier = 1;
 
     createWeightsChart();
