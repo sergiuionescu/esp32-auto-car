@@ -1,5 +1,5 @@
 class BasicEnvironment {
-  constructor(containerId, additionalObstacles = [], isMaster = false) {
+  constructor(containerId, additionalObstacles = [], carPosition = null, isMaster = false) {
     this.multiplier = 1;
     this.rewardEnvironment = new RewardEnvironment();
     this.isMaster = isMaster;
@@ -17,6 +17,9 @@ class BasicEnvironment {
     // create a renderer
     let environmentWidth = 500;
     let environmentHeight = 350;
+    if(carPosition === null) {
+      carPosition = {x: 100, y:environmentHeight/2};
+    }
     let render = Render.create({
       element: document.getElementById(containerId),
       engine: engine,
@@ -46,18 +49,18 @@ class BasicEnvironment {
     boxes.push(wallL);
     boxes.push(wallR);
 
-    this.car = new Car(boxes, actorCritic, this.isMaster);
+    this.car = new Car(boxes, actorCritic, carPosition,  this.isMaster);
     boxes.push(this.car.carBody);
 
     // add all the bodies to the world
     World.add(engine.world, boxes);
 
-    Events.on(engine, 'collisionStart', function (event) {
-      this.car.collisions++;
-    });
-    Events.on(engine, 'collisionActive', function (event) {
-      reward += config.collisionPenalty;
-    })
+    // Events.on(engine, 'collisionStart', function (event) {
+    //   this.car.collisions++;
+    // });
+    // Events.on(engine, 'collisionActive', function (event) {
+    //   reward += config.collisionPenalty;
+    // })
 
     // run the engine
     Engine.run(engine);

@@ -6,7 +6,7 @@ const ACTION_BACK = 3;
 const actions = [ACTION_FORWARD, ACTION_RIGHT, ACTION_LEFT]
 
 class Car {
-  constructor(collisionBoxes, actorCritic, pushToChart = false) {
+  constructor(collisionBoxes, actorCritic, position = {x: 100, y: 175}, pushToChart = false) {
 
     this.carLength = 25;
     this.carWidth = this.carLength / 5 * 3;
@@ -15,6 +15,7 @@ class Car {
     this.previousState = this.state = [];
     this.previousAction = ACTION_FORWARD;
     this.pushToChart = pushToChart;
+    this.collisions = 0;
 
     this.state = [];
     for (let i = 0; i < config.activeHistoryLength; i++) {
@@ -27,7 +28,7 @@ class Car {
         render: {
           fillStyle: 'red', strokeStyle: 'blue', lineWidth: 3
         }
-      }, carX = 100, carY = 175,
+      }, carX = position.x, carY = position.y,
       carBody = Bodies.rectangle(carX, carY, this.carLength, this.carWidth), sensorRadius = this.carLength / 15,
       carWheelFL = Bodies.rectangle(carX - this.carLength / 2 + this.carLength / 3.5, carY - this.carWidth / 2, this.carLength / 3.5, this.carWidth / 3.5),
       carWheelBL = Bodies.rectangle(carX + this.carLength / 2 - this.carLength / 3.5, carY - this.carWidth / 2, this.carLength / 3.5, this.carWidth / 3.5),

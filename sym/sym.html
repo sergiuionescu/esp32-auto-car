@@ -41,6 +41,8 @@
     <div class="col" style="min-width: 1050px">
       <div id="basicEnvironment"  style="float: left;"></div>
       <div id="randomEnvironment" style="float: left;"></div>
+      <div id="leftMazeEnvironment" style="float: left;"></div>
+      <div id="rightMazeEnvironment" style="float: left;"></div>
     </div>
     <div class="col-sm" style="width: 350px;">
       <div id="reward-chart"></div>
@@ -220,7 +222,10 @@
   createWeightsChart();
 </script>
 <script>
-  let basicEnvironment = new BasicEnvironment('basicEnvironment', [], true);
+  let environmentWidth = 500;
+  let environmentHeight = 350;
+
+  let basicEnvironment = new BasicEnvironment('basicEnvironment', [], null,  true);
 
   let randomObstacles = [];
   for (let i = 0; i < config.obstacles; i++) {
@@ -229,8 +234,25 @@
   }
   let randomEnvironment = new BasicEnvironment('randomEnvironment', randomObstacles);
 
+
+  let leftMazeObstacles = [];
+  for (let i = 0; i < 5; i++) {
+    let rectangle = Matter.Bodies.rectangle(-200 * ((i+1)%2) + 100 + environmentWidth/2,  environmentHeight/5 * i, environmentWidth + 10, 10, {isStatic: true});
+    leftMazeObstacles.push(rectangle);
+  }
+  let leftMazeEnvironment = new BasicEnvironment('leftMazeEnvironment', leftMazeObstacles, {x: 50, y: 312});
+
+  let rightMazeObstacles = [];
+  for (let i = 0; i < 5; i++) {
+    let rectangle = Matter.Bodies.rectangle(-200 * (i%2) + 100 + environmentWidth/2,  environmentHeight/5 * i, environmentWidth + 10, 10, {isStatic: true});
+    rightMazeObstacles.push(rectangle);
+  }
+  let rightMazeEnvironment = new BasicEnvironment('rightMazeEnvironment', rightMazeObstacles, {x: 50, y: 12});
+
   basicEnvironment.run();
   randomEnvironment.run();
+  leftMazeEnvironment.run();
+  rightMazeEnvironment.run();
 </script>
 <script>
   function updateConfigUi() {
