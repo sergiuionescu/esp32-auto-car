@@ -93,7 +93,7 @@ class ActorCritic {
     });
   }
 
-  getAction(state, actions) {
+  getAction(state, actions, pushToChart = false) {
     let normalizeFeatures = normalizer.normalizeFeatures(state);
     let policy = this.actor.predict(tf.tensor2d(normalizeFeatures, [1, state.length * state[0].length]), {
       batchSize: 1,
@@ -101,10 +101,14 @@ class ActorCritic {
 
     let policyFlat = policy.dataSync();
     let weights = [parseFloat(policyFlat[ACTION_FORWARD]), parseFloat(policyFlat[ACTION_RIGHT]), parseFloat(policyFlat[ACTION_LEFT])];
-    pushToWeightsChart(this.step, weights);
+    if (pushToChart) {
+      pushToWeightsChart(this.step, weights);
+    }
 
     let action = chance.weighted(actions, weights);
-    perceptionChart.update(normalizeFeatures, action);
+    if (pushToChart) {
+      perceptionChart.update(normalizeFeatures, action);
+    }
     if (Math.random() < this.config.epsilon) {
       action = chance.weighted(actions, [1, 1, 1]);
     }
@@ -112,9 +116,9 @@ class ActorCritic {
     return action;
   }
 
-  bufferReplay(previousState, previousAction, reward, state) {
+  bufferReplay(previousState, previousAction, reward, state, pushToChart) {
     this.replayBuffer.push({'ps': previousState, 'pa': previousAction, 'r': reward, 's': state});
-    this.computeTrainingData(previousState, state, reward);
+    this.computeTrainingData(previousState, state, reward, pushToChart);
 
     this.step++;
   }
@@ -137,7 +141,7 @@ class ActorCritic {
     this.rewards.push(reward);
   }
 
-  computeTrainingData(previousState, state, reward, chart = true) {
+  computeTrainingData(previousState, state, reward, pushToChart = true) {
     let advantages = new Array(this.actionSize).fill(0);
 
     let normalizedPreviousState = normalizer.normalizeFeatures(previousState);
@@ -151,7 +155,7 @@ class ActorCritic {
     let target = reward + config.discountFactor * predictedStateValue;
     let advantage = target - predictedPreviousStateValue;
 
-    if (chart) {
+    if (pushToChart) {
       pushToRewardChart(actorCritic.step, reward, parseFloat(predictedPreviousStateValue), parseFloat(predictedStateValue), advantage, target);
     }
 

@@ -38,8 +38,9 @@
     </div>
   </div>
   <div class="row">
-    <div class="col">
-      <div id="environment" style="min-width: 1000px;"></div>
+    <div class="col" style="min-width: 1050px">
+      <div id="basicEnvironment"  style="float: left;"></div>
+      <div id="randomEnvironment" style="float: left;"></div>
     </div>
     <div class="col-sm" style="width: 350px;">
       <div id="reward-chart"></div>
@@ -130,10 +131,15 @@
     src="https://cdn.polyfill.io/v2/polyfill.js?features=default,String.prototype.repeat,Array.prototype.find,Array.prototype.findIndex,Math.trunc,Math.sign"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script src="js/perception.chart.js"></script>
+<script src="js/reward.chart.js"></script>
+<script src="js/history.chart.js"></script>
+<script src="js/weights.chart.js"></script>
+<script src="js/reward.environment.js"></script>
 <script src="js/collider.js"></script>
 <script src="js/normalizer.js"></script>
 <script src="js/car.js"></script>
-<script src="js/actor.crific.js"></script>
+<script src="js/actor.critic.js"></script>
+<script src="js/environment/basic.environment.js"></script>
 <script>
   let localStorageSize = 0;
   for(var key in window.localStorage){
@@ -143,12 +149,6 @@
   }
 
   console.log('Using ' + localStorageSize/1024/1024 + ' MB of localStorage space.');
-</script>
-<script>
-  const ACTION_FORWARD = 0;
-  const ACTION_RIGHT = 1;
-  const ACTION_LEFT = 2;
-  const ACTION_BACK = 3;
 </script>
 <script>
   let reset = window.location.hash.substr(1) === 'reset';
@@ -211,470 +211,26 @@
 
 </script>
 <script>
-  class InputListener {
-    leftKeyPressed = false;
-    rightKeyPressed = false;
-    forwardKeyPressed = false;
-    backKeyPressed = false;
-
-    listen() {
-      var instance = this;
-      $('body').on('keydown', function (e) {
-        if (e.which === 65) {
-          instance.leftKeyPressed = true;
-        } else if (e.which === 68) {
-          instance.rightKeyPressed = true;
-        } else if (e.which === 87) {
-          instance.forwardKeyPressed = true;
-        } else if (e.which === 83) {
-          instance.backKeyPressed = true;
-        }
-      });
-      $('body').on('keyup', function (e) {
-        if (e.which === 65) {
-          instance.leftKeyPressed = false;
-        } else if (e.which === 68) {
-          instance.rightKeyPressed = false;
-        } else if (e.which === 87) {
-          instance.forwardKeyPressed = false;
-        } else if (e.which === 83) {
-          instance.backKeyPressed = false;
-        }
-      });
-    }
-  }
-
-  listener = new InputListener();
-  listener.listen();
-</script>
-
-<script>
-  function createHistoryChart(historyData) {
-    var canvasContainer = document.getElementById('training-history-container');
-    var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 350;
-    canvasContainer.appendChild(canvas);
-    historyChart = new Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: Object.keys(historyData["averageActorLoss"]),
-        datasets: [
-          {
-            label: 'Actor loss',
-            yAxisID: 'y-axis-1',
-            fill: false,
-            borderColor: "#E74C3C",
-            data: historyData['averageActorLoss']
-          },
-          {
-            label: 'Critic loss',
-            yAxisID: 'y-axis-1',
-            fill: false,
-            borderColor: "#16A085",
-            data: historyData['averageCriticLoss']
-          },
-          {
-            label: 'Reward',
-            yAxisID: 'y-axis-1',
-            fill: false,
-            borderColor: "#1634a0",
-            data: historyData['averageReward']
-          }
-        ]
-      },
-      options: {
-        title: {
-          display: true,
-          text: 'Evolution average history'
-        },
-        scales: {
-          yAxes: [
-            {
-              type: "linear",
-              display: true,
-              position: "left",
-              id: "y-axis-1",
-            }
-          ],
-        }
-      }
-    });
-  }
-
-  function resetHistoryChart() {
-    historyChart.data.labels = [];
-    historyChart.data.datasets[0].data = [];
-    historyChart.data.datasets[1].data = [];
-    historyChart.data.datasets[2].data = [];
-
-    historyChart.update();
-  }
-
-  function pushToHistoryChart(loss, type) {
-    if(type === 'actor') {
-      historyChart.data.datasets[0].data.push(loss);
-      if (historyChart.data.datasets[0].data.length > historyChart.data.labels.length) {
-        historyChart.data.labels.push(historyChart.data.datasets[0].data.length);
-      }
-    } else {
-      historyChart.data.datasets[1].data.push(loss);
-      if (historyChart.data.datasets[1].data.length > historyChart.data.labels.length) {
-        historyChart.data.labels.push(historyChart.data.datasets[1].data.length);
-      }
-    }
-    historyChart.update();
-  }
-
-  createHistoryChart(historyData);
-
-</script>
-
-<script>
-  function createRewardChart() {
-    var canvasContainer = document.getElementById('reward-chart');
-    var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 350;
-    canvasContainer.appendChild(canvas);
-    rewardChart = new Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: 'reward',
-            yAxisID: 'y-axis-1',
-            fill: false,
-            backgroundColor: "#157041",
-            borderColor: "blue",
-            data: []
-          },
-          {
-            label: 'predicted',
-            yAxisID: 'y-axis-1',
-            fill: false,
-            borderColor: "orange",
-            data: [],
-          },
-          {
-            label: 'predicted next',
-            yAxisID: 'y-axis-1',
-            fill: false,
-            borderColor: "green",
-            data: [],
-          },
-          {
-            label: 'advantage',
-            yAxisID: 'y-axis-1',
-            fill: false,
-            borderColor: "yellow",
-            data: [],
-            hidden: true,
-          },
-          {
-            label: 'target',
-            yAxisID: 'y-axis-1',
-            fill: false,
-            borderColor: "gray",
-            data: [],
-            hidden: true,
-          }
-        ]
-      },
-      options: {
-        title: {
-          display: true,
-          text: 'Reward'
-        },
-        scales: {
-          yAxes: [
-            {
-              type: "linear",
-              display: true,
-              position: "left",
-              id: "y-axis-1"
-            }
-          ],
-        }
-      }
-    });
-  }
-
-  function pushToRewardChart(step, score, predicted, predictedNext, advantage, target) {
-    rewardChart.data.labels.push(step);
-    rewardChart.data.datasets[0].data.push(score);
-    rewardChart.data.datasets[1].data.push(predicted);
-    rewardChart.data.datasets[2].data.push(predictedNext);
-    rewardChart.data.datasets[3].data.push(advantage);
-    rewardChart.data.datasets[4].data.push(target);
-    if (rewardChart.data.labels.length > 50) {
-      rewardChart.data.labels.shift();
-      rewardChart.data.datasets[0].data.shift();
-      rewardChart.data.datasets[1].data.shift();
-      rewardChart.data.datasets[2].data.shift();
-      rewardChart.data.datasets[3].data.shift();
-      rewardChart.data.datasets[4].data.shift();
-    }
-    rewardChart.update();
-  }
-
-  createRewardChart();
-
-</script>
-<script>
-  function createWeightsChart() {
-    var canvasContainer = document.getElementById('weights');
-    var canvas = document.createElement("CANVAS");
-    canvasContainer.style.width = 350;
-    canvasContainer.appendChild(canvas);
-    weightsChart = new Chart(canvas, {
-      type: 'bar',
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: 'Right',
-            fill: false,
-            backgroundColor: "#1238c1",
-            data: []
-          },
-          {
-            label: 'Forward',
-            fill: false,
-            backgroundColor: "#16A085",
-            data: []
-          },
-          {
-            label: 'Left',
-            fill: false,
-            backgroundColor: "#E74C3C",
-            data: []
-          },
-          {
-            label: 'Back',
-            fill: false,
-            backgroundColor: "#e7cb3c",
-            data: []
-          }
-        ]
-      },
-      options: {
-        title: {
-          display: true,
-          text: 'Weights'
-        },
-        scales: {
-          xAxes: [{
-            stacked: true,
-          }],
-          yAxes: [{
-            stacked: true
-          }]
-        }
-      }
-    });
-  }
-
-  function pushToWeightsChart(step, weights) {
-    weightsChart.data.labels.push(step);
-    weightsChart.data.datasets[0].data.push(weights[ACTION_RIGHT]);
-    weightsChart.data.datasets[1].data.push(weights[ACTION_FORWARD]);
-    weightsChart.data.datasets[2].data.push(weights[ACTION_LEFT]);
-    weightsChart.data.datasets[3].data.push(weights[ACTION_BACK]);
-    if (weightsChart.data.labels.length > 50) {
-      weightsChart.data.labels.shift();
-      weightsChart.data.datasets[0].data.shift();
-      weightsChart.data.datasets[1].data.shift();
-      weightsChart.data.datasets[2].data.shift();
-      weightsChart.data.datasets[3].data.shift();
-    }
-    weightsChart.update();
-  }
-</script>
-<script>
-  let perceptionChart = new PerceptionChart('sensors', 350, 120);
-</script>
-<script>
-  var historyChart,
+   let historyChart,
     rewardChart,
     weightsChart;
-  latest_loss = 1;
-  latest_accuracy = 0;
+  let perceptionChart = new PerceptionChart('sensors', 350, 120);
+  createHistoryChart(historyData);
+  createRewardChart();
+  createWeightsChart();
+</script>
+<script>
+  let basicEnvironment = new BasicEnvironment('basicEnvironment', [], true);
 
-  async function initEnvironment() {
-    let Engine = Matter.Engine,
-      Render = Matter.Render,
-      World = Matter.World,
-      Events = Matter.Events,
-      Bodies = Matter.Bodies,
-      sensorDistanceBM = sensorDistanceFM = sensorDistanceFL = sensorDistanceFR = sensorDistanceMax = 100,
-      multiplier = 1;
-
-    createWeightsChart();
-
-    // create an engine
-    let engine = Engine.create();
-    engine.world.gravity.y = 0;
-
-    // create a renderer
-    let environmentWidth = 1000;
-    let environmentHeight = 700;
-    let render = Render.create({
-      element: document.getElementById('environment'),
-      engine: engine,
-      options: {
-        showAngleIndicator: false,
-        showDebug: false,
-        showVelocity: false,
-        showCollisions: false,
-        wireframes: false,
-        width: environmentWidth,
-        height: environmentHeight
-      }
-    });
-
-    let previousState = [],
-      state = [],
-      previousAction = ACTION_FORWARD,
-      actionBeforePrevious = ACTION_FORWARD,
-      previousReward = 0,
-      maxReward = 0, 
-      previousMinDistance;
-
-
-    for (let i = 0; i < config.activeHistoryLength; i++) {
-      state.push([sensorDistanceMax, sensorDistanceMax, sensorDistanceMax]);
-    }
-
-    // create two boxes and a ground
-    let boxes = [];
-
-    // for(i=0; i<4;i++) {
-    //   let box = Bodies.rectangle(environmentWidth/2 - 400*(i%2) + 200, i*environmentHeight/4, environmentWidth, 10, {isStatic: true});
-    //   boxes.push(box);
-    // }
-
-    for (i = 0; i < config.obstacles; i++) {
-      let box = Bodies.polygon(300 + environmentWidth/2 * Math.random(), environmentHeight * Math.random(), parseInt(3 + 5 * Math.random()), 10 + 50 * Math.random(), {isStatic: true});
-      boxes.push(box);
-    }
-    let wallB = Bodies.rectangle(environmentWidth/2, environmentHeight, environmentWidth+10, 20, {isStatic: true});
-    let wallT = Bodies.rectangle(environmentWidth/2, 0, environmentWidth+10, 20, {isStatic: true});
-    let wallL = Bodies.rectangle(0, 205, 20, environmentWidth+10, {isStatic: true});
-    let wallR = Bodies.rectangle(environmentWidth, 205, 20, environmentWidth+10, {isStatic: true});
-    boxes.push(wallB);
-    boxes.push(wallT);
-    boxes.push(wallL);
-    boxes.push(wallR);
-
-    let car = new Car(boxes);
-    boxes.push(car.carBody);
-
-    // add all the bodies to the world
-    World.add(engine.world, boxes);
-
-    Events.on(engine, 'collisionStart', function (event) {
-      car.collisions++;
-    });
-    Events.on(engine, 'collisionActive', function (event) {
-      reward += config.collisionPenalty;
-    })
-
-    // run the engine
-    Engine.run(engine);
-
-    // run the renderer
-    Render.run(render);
-
-    async function addInput() {
-      let done = false;
-      const actions = [
-        0, 1, 2
-      ];
-
-      sensorDistanceBM = parseInt(car.colliderBM.getSensorDistance());
-      sensorDistanceFM = parseInt(car.colliderFM.getSensorDistance());
-      sensorDistanceFL = parseInt(car.colliderFL.getSensorDistance());
-      sensorDistanceFR = parseInt(car.colliderFR.getSensorDistance());
-
-      state.push([
-        sensorDistanceFL,
-        sensorDistanceFM,
-        sensorDistanceFR
-      ]);
-      state.shift();
-
-      if(!config.cumulativeReward) {
-        reward = 0;
-      }
-      let minVisibleDistance = Math.min(sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
-      if(previousMinDistance < minVisibleDistance && minVisibleDistance > config.proximityThreshold) {
-        reward = Math.max(0, reward);
-      }
-      if (previousAction === ACTION_FORWARD && minVisibleDistance > config.proximityThreshold) {
-        reward += sensorDistanceMax;
-      }
-      if (previousAction === ACTION_BACK) {
-        reward -= sensorDistanceMax/10;
-      }
-      reward -= sensorDistanceMax - sensorDistanceBM;
-      reward -= sensorDistanceMax - sensorDistanceFM;
-      reward -= sensorDistanceMax - sensorDistanceFL;
-      reward -= sensorDistanceMax - sensorDistanceFR;
-
-      if(reward > maxReward) {
-        maxReward = reward;
-      }
-
-      let action = actorCritic.getAction(state, actions);
-      if (previousState.length > 0) {
-        actorCritic.bufferReplay([...previousState], previousAction, reward, [...state]);
-      }
-
-      previousState = [...state];
-      actionBeforePrevious = previousAction;
-      previousAction = action;
-      previousReward = reward;
-      previousMinDistance = minVisibleDistance;
-
-      car.act(action);
-
-      if (actorCritic.step > 400 || done || reward < -10000) {
-        actorCritic.convertRawTrainingHistory();
-
-        await actorCritic.trainModel();
-
-        actorCritic.save().then( () => {
-          historyData['averageActorLoss'].push(
-            actorCritic.getAverageActorLoss()
-          );
-          historyData['averageCriticLoss'].push(
-            actorCritic.getAverageCriticLoss()
-          );
-          historyData['averageReward'].push(
-            actorCritic.getAverageReward()
-          );
-          if (historyData['averageActorLoss'].length > 50) {
-            historyData['averageActorLoss'].shift();
-            historyData['averageCriticLoss'].shift();
-            historyData['averageReward'].shift();
-          }
-          localStorage.setItem('historyData', JSON.stringify(historyData));
-
-          config.epsilon = Math.max(Math.min(1, (400 - actorCritic.step) * (1 - config.minEpsilon) / 400), config.minEpsilon);
-          saveConfigToStorage();
-
-          window.location.href = window.location.href.split('#')[0];
-        });
-
-      } else {
-        setTimeout(addInput, 50 / multiplier);
-      }
-    }
-
-    addInput();
+  let randomObstacles = [];
+  for (let i = 0; i < config.obstacles; i++) {
+    let box = Matter.Bodies.polygon(200 + 250 * Math.random(), 350 * Math.random(), parseInt(3 + 5 * Math.random()), 10 + 50 * Math.random(), {isStatic: true});
+    randomObstacles.push(box);
   }
+  let randomEnvironment = new BasicEnvironment('randomEnvironment', randomObstacles);
 
-  initEnvironment();
+  // basicEnvironment.run();
+  // randomEnvironment.run();
 </script>
 <script>
   function updateConfigUi() {
