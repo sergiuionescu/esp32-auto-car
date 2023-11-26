@@ -76,7 +76,7 @@ class BasicEnvironment {
     reward = this.rewardEnvironment.getReward(this.car);
     this.car.act(state, reward);
 
-    if (this.isMaster && (actorCritic.step > 400 || done || reward < -10000)) {
+    if (this.isMaster && (actorCritic.step > 1000 || done || reward < -10000)) {
       actorCritic.convertRawTrainingHistory();
 
       await actorCritic.trainModel();
