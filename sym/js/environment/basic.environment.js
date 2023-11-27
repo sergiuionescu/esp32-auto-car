@@ -3,6 +3,7 @@ class BasicEnvironment {
     this.multiplier = 1;
     this.rewardEnvironment = new RewardEnvironment();
     this.isMaster = isMaster;
+    this.name = containerId;
 
     let Engine = Matter.Engine,
       Render = Matter.Render,
@@ -49,7 +50,7 @@ class BasicEnvironment {
     boxes.push(wallL);
     boxes.push(wallR);
 
-    this.car = new Car(boxes, actorCritic, carPosition,  this.isMaster);
+    this.car = new Car(this, boxes, actorCritic, carPosition,  this.isMaster);
     boxes.push(this.car.carBody);
 
     // add all the bodies to the world

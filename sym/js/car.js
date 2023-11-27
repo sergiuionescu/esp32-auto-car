@@ -6,8 +6,9 @@ const ACTION_BACK = 3;
 const actions = [ACTION_FORWARD, ACTION_RIGHT, ACTION_LEFT]
 
 class Car {
-  constructor(collisionBoxes, actorCritic, position = {x: 100, y: 175}, pushToChart = false) {
+  constructor(environment, collisionBoxes, actorCritic, position = {x: 100, y: 175}, pushToChart = false) {
 
+    this.environment = environment;
     this.carLength = 25;
     this.carWidth = this.carLength / 5 * 3;
     this.actorCritic = actorCritic;
@@ -16,6 +17,7 @@ class Car {
     this.previousAction = ACTION_FORWARD;
     this.pushToChart = pushToChart;
     this.collisions = 0;
+    this.perceptionChart = new PerceptionChart(environment.name, 350, 15);
 
     this.state = [];
     for (let i = 0; i < config.activeHistoryLength; i++) {
@@ -65,6 +67,8 @@ class Car {
     this.state.shift();
 
     let action = actorCritic.getAction(this.state, actions, this.pushToChart);
+
+    this.perceptionChart.update(normalizer.normalizeFeatures(this.previousState), this.previousAction, reward);
 
     if (this.previousState.length > 0) {
       this.actorCritic.bufferReplay([...this.previousState], this.previousAction, reward, [...this.state], this.pushToChart);

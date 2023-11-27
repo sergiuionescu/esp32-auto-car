@@ -38,10 +38,12 @@
     </div>
   </div>
   <div class="row">
-    <div class="col" style="min-width: 1050px">
+    <div class="col" style="min-width: 525px">
       <div id="basicEnvironment"  style="float: left;"></div>
-      <div id="randomEnvironment" style="float: left;"></div>
       <div id="leftMazeEnvironment" style="float: left;"></div>
+    </div>
+    <div class="col" style="min-width: 525px">
+      <div id="randomEnvironment" style="float: left;"></div>
       <div id="rightMazeEnvironment" style="float: left;"></div>
     </div>
     <div class="col-sm" style="width: 350px;">
@@ -216,7 +218,6 @@
    let historyChart,
     rewardChart,
     weightsChart;
-  let perceptionChart = new PerceptionChart('sensors', 350, 120);
   createHistoryChart(historyData);
   createRewardChart();
   createWeightsChart();

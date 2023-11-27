@@ -106,9 +106,7 @@ class ActorCritic {
     }
 
     let action = chance.weighted(actions, weights);
-    if (pushToChart) {
-      perceptionChart.update(normalizeFeatures, action);
-    }
+
     if (Math.random() < this.config.epsilon) {
       action = chance.weighted(actions, [1, 1, 1]);
     }
@@ -217,8 +215,6 @@ class ActorCritic {
     this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
     this.episode++;
 
-    let replayBufferSize = Math.min(config.maxReplayBufferSize, parseInt(3000000 / JSON.stringify(this.replayBuffer[0]).length));
-    localStorage.setItem('replayBuffer', JSON.stringify(this.replayBuffer.slice(-replayBufferSize)));
     localStorage.setItem('episode', this.episode);
     localStorage.setItem('averageReward', this.averageReward);
     localStorage.setItem('name', this.name);
@@ -239,7 +235,7 @@ class ActorCritic {
       });
       this.name = name;
       this.episode = fromLocalStorage ? (localStorage.getItem('episode') ?? 0) : config.episode;
-      this.replayBuffer = JSON.parse(localStorage.getItem('replayBuffer') ?? '[]');
+      this.replayBuffer = [];
       this.averageReward = localStorage.getItem('averageReward') ?? 0;
       document.getElementById('episode').innerText = this.episode;
       document.getElementById('name').innerHTML = this.name;

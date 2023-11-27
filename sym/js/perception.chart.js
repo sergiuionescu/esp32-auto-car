@@ -5,16 +5,16 @@ class PerceptionChart {
     this.canvas.width = width;
     this.canvas.height = height;
 
-
     let container = document.getElementById(containerId);
     container.appendChild(this.canvas);
     this.context = this.canvas.getContext('2d');
+    this.context.font = height + 'px serif';
   }
 
-  update(state, action) {
+  update(state, action, reward) {
     this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    const barWidth = this.canvas.width / (state.length / 3 + 1);
+    const barWidth = (this.canvas.width - 30) / (state.length / 3 + 1);
     const barHeight = this.canvas.height / 3;
 
     let offsetX = 0;
@@ -40,5 +40,7 @@ class PerceptionChart {
     this.context.fillStyle = actionColor;
     this.context.fillRect(offsetX, offsetY, barWidth, this.canvas.height);
     this.context.fill();
+    this.context.fillStyle = 'blue';
+    this.context.fillText(reward, this.canvas.width - 28, this.canvas.height - 2);
   }
 }
