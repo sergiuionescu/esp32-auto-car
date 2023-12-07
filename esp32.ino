@@ -365,17 +365,17 @@ void updatePWM(){
 
    if((aiMode == AI_MODE_ASSIST && distanceThreshold) || aiMode == AI_MODE_AUTO) {
       if(aiAction == AI_ACTION_FORWARD) {
-        motorRight.value = 220;
-        motorLeft.value = 220;
+        motorRight.value = 150;
+        motorLeft.value = 150;
       } else if(aiAction == AI_ACTION_RIGHT) {
-        motorRight.value = -220;
-        motorLeft.value = 220;
+        motorRight.value = -150;
+        motorLeft.value = 150;
       } else if(aiAction == AI_ACTION_LEFT) {
-        motorRight.value = 220;
-        motorLeft.value = -220;
+        motorRight.value = 150;
+        motorLeft.value = -150;
       } else if(aiAction == AI_ACTION_BACK) {
-        motorRight.value = -220;
-        motorLeft.value = -220;
+        motorRight.value = -150;
+        motorLeft.value = -150;
       }
     } 
 

@@ -7,7 +7,6 @@ class RewardEnvironment {
 
   getReward(car) {
     let reward = 0;
-    let sensorDistanceBM = parseInt(car.colliderBM.getSensorDistance());
     let sensorDistanceFM = parseInt(car.colliderFM.getSensorDistance());
     let sensorDistanceFL = parseInt(car.colliderFL.getSensorDistance());
     let sensorDistanceFR = parseInt(car.colliderFR.getSensorDistance());
@@ -19,7 +18,6 @@ class RewardEnvironment {
     if (car.previousAction === ACTION_BACK) {
       reward -= sensorDistanceMax / 10;
     }
-    reward -= car.maxDistance - sensorDistanceBM;
     reward -= car.maxDistance - sensorDistanceFM;
     reward -= car.maxDistance - sensorDistanceFL;
     reward -= car.maxDistance - sensorDistanceFR;
