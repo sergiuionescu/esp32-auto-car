@@ -6,14 +6,14 @@ class RewardEnvironment {
   }
 
   getReward(car) {
-    let reward = 0;
+    let reward = 300;
     let sensorDistanceFM = parseInt(car.colliderFM.getSensorDistance());
     let sensorDistanceFL = parseInt(car.colliderFL.getSensorDistance());
     let sensorDistanceFR = parseInt(car.colliderFR.getSensorDistance());
 
     let minVisibleDistance = Math.min(sensorDistanceFM, sensorDistanceFL, sensorDistanceFR);
     if (car.previousAction === ACTION_FORWARD && minVisibleDistance > config.proximityThreshold) {
-      reward += car.maxDistance;
+      reward += 3 * car.maxDistance;
     }
     if (car.previousAction === ACTION_BACK) {
       reward -= sensorDistanceMax / 10;

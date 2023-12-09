@@ -34,6 +34,7 @@
       <button class='btn' id='download' name='download'><i class='fa fa-download'> Download</i></button>
       <button class='btn' id='pretrained' name='pretrained'><i class='fa fa-hdd-o'> Load pretrained model</i></button>
        Episode: <span id="episode">0</span>
+      | Localstorage Usage <span id="localStorage">0</span> MB
     </div>
   </div>
   <div class="row">
@@ -89,9 +90,9 @@
         <label for="epsilon" class="form-control">Epsilon</label>
       </div>
       <div class="form-floating">
-        <label for="discountFactor" class="form-control">Discount Factor</label>
         <input class="form-control" id="discountFactor"
                aria-describedby="Discount factor">
+        <label for="discountFactor" class="form-control">Discount Factor</label>
       </div>
       <div class="form-floating">
         <input class="form-control" id="actorLearningRate"
@@ -156,7 +157,7 @@
       }
   }
 
-  console.log('Using ' + localStorageSize/1024/1024 + ' MB of localStorage space.');
+  document.getElementById('localStorage').innerText = (localStorageSize/1024/1024).toFixed(2);
 </script>
 <script>
   let reset = window.location.hash.substr(1) === 'reset';
@@ -229,6 +230,7 @@
 <script>
   let environmentWidth = 500;
   let environmentHeight = 350;
+  let done = false;
 
   let basicEnvironment = new BasicEnvironment('basicEnvironment', [], null,  true);
 
@@ -241,18 +243,18 @@
 
 
   let leftMazeObstacles = [];
-  for (let i = 0; i < 5; i++) {
-    let rectangle = Matter.Bodies.rectangle(-200 * ((i+1)%2) + 100 + environmentWidth/2,  environmentHeight/5 * i, environmentWidth + 10, 10, {isStatic: true});
+  for (let i = 0; i < 3; i++) {
+    let rectangle = Matter.Bodies.rectangle(-200 * ((i+1)%2) + 100 + environmentWidth/2,  environmentHeight/3 * i, environmentWidth + 10, 10, {isStatic: true});
     leftMazeObstacles.push(rectangle);
   }
-  let leftMazeEnvironment = new BasicEnvironment('leftMazeEnvironment', leftMazeObstacles, {x: 50, y: 312});
+  let leftMazeEnvironment = new BasicEnvironment('leftMazeEnvironment', leftMazeObstacles, {x: 50, y: 275});
 
   let rightMazeObstacles = [];
-  for (let i = 0; i < 5; i++) {
-    let rectangle = Matter.Bodies.rectangle(-200 * (i%2) + 100 + environmentWidth/2,  environmentHeight/5 * i, environmentWidth + 10, 10, {isStatic: true});
+  for (let i = 0; i < 3; i++) {
+    let rectangle = Matter.Bodies.rectangle(-200 * (i%2) + 100 + environmentWidth/2,  environmentHeight/3 * i, environmentWidth + 10, 10, {isStatic: true});
     rightMazeObstacles.push(rectangle);
   }
-  let rightMazeEnvironment = new BasicEnvironment('rightMazeEnvironment', rightMazeObstacles, {x: 50, y: 12});
+  let rightMazeEnvironment = new BasicEnvironment('rightMazeEnvironment', rightMazeObstacles, {x: 50, y: 50});
 
   basicEnvironment.run();
   randomEnvironment.run();

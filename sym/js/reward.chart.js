@@ -36,7 +36,7 @@ function createRewardChart() {
           fill: false,
           borderColor: "yellow",
           data: [],
-          hidden: true,
+          hidden: false,
         },
         {
           label: 'target',
@@ -44,7 +44,7 @@ function createRewardChart() {
           fill: false,
           borderColor: "gray",
           data: [],
-          hidden: true,
+          hidden: false,
         }
       ]
     },

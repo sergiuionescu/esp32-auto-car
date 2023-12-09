@@ -5,6 +5,8 @@ class ActorCritic {
     this.historyLength = historyLength;
     this.actionSize = actionSize;
     this.replayBuffer = [];
+    this.stateAdvantages = {};
+    this.trainingBufferKeys = {};
     this.valueSize = 1;
     this.act = act;
 
@@ -128,20 +130,40 @@ class ActorCritic {
   }
 
   async bufferTrainingData(state, action, reward, nextState) {
-    let {advantages, normalizedState, target, advantage} = this.computeTrainingData(state, nextState, reward, false);
+    let advantages = new Array(this.actionSize).fill(0);
+    let {normalizedState, target, advantage} = this.computeTrainingData(state, nextState, reward, false);
+
+    const stateKey = JSON.stringify(normalizedState);
+    if (stateKey in this.stateAdvantages) {
+      advantages = this.stateAdvantages[stateKey];
+    }
 
     advantages[action] = advantage;
 
-    this.trainingBuffer['tfState'].push(normalizedState);
-    this.trainingBuffer['advantages'].push(advantages);
-    this.trainingBuffer['targets'].push(target);
+    this.stateAdvantages[stateKey] = advantages;
+
+    let count = 0;
+    for (advantage of advantages) {
+      if (advantage > 0) {
+        count++;
+      }
+    }
+    if (count > 1) {
+      console.log(advantages, stateKey);
+    }
+
+    if (!(stateKey in this.trainingBufferKeys)) {
+      this.trainingBuffer['tfState'].push(normalizedState);
+      this.trainingBuffer['advantages'].push(advantages);
+      this.trainingBuffer['targets'].push(target);
+    }
+    this.trainingBufferKeys[stateKey] = true;
+
 
     this.rewards.push(reward);
   }
 
   computeTrainingData(previousState, state, reward, pushToChart = true) {
-    let advantages = new Array(this.actionSize).fill(0);
-
     let normalizedPreviousState = normalizer.normalizeFeatures(previousState);
     let tfPreviousState = tf.tensor2d(normalizedPreviousState, [1, normalizedPreviousState.length]);
     let predictedPreviousStateValue = this.critic.predict(tfPreviousState).dataSync();
@@ -157,7 +179,7 @@ class ActorCritic {
       pushToRewardChart(actorCritic.step, reward, parseFloat(predictedPreviousStateValue), parseFloat(predictedStateValue), advantage, target);
     }
 
-    return {advantages, normalizedState: normalizedPreviousState, target, advantage};
+    return {normalizedState: normalizedPreviousState, target, advantage};
   }
 
   async trainModel() {
@@ -215,6 +237,8 @@ class ActorCritic {
     this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
     this.episode++;
 
+    let stateAdvantagesSize = parseInt(3000000 / JSON.stringify(this.stateAdvantages).length);
+    localStorage.setItem('stateAdvantages', JSON.stringify(this.stateAdvantages));
     localStorage.setItem('episode', this.episode);
     localStorage.setItem('averageReward', this.averageReward);
     localStorage.setItem('name', this.name);
@@ -236,6 +260,7 @@ class ActorCritic {
       this.name = name;
       this.episode = fromLocalStorage ? (localStorage.getItem('episode') ?? 0) : config.episode;
       this.replayBuffer = [];
+      this.stateAdvantages = JSON.parse(localStorage.getItem('stateAdvantages') ?? '{}');
       this.averageReward = localStorage.getItem('averageReward') ?? 0;
       document.getElementById('episode').innerText = this.episode;
       document.getElementById('name').innerHTML = this.name;

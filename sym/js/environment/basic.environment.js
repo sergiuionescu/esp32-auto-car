@@ -4,6 +4,7 @@ class BasicEnvironment {
     this.rewardEnvironment = new RewardEnvironment();
     this.isMaster = isMaster;
     this.name = containerId;
+    this.done = false;
 
     let Engine = Matter.Engine,
       Render = Matter.Render,
@@ -56,12 +57,12 @@ class BasicEnvironment {
     // add all the bodies to the world
     World.add(engine.world, boxes);
 
-    // Events.on(engine, 'collisionStart', function (event) {
-    //   this.car.collisions++;
-    // });
-    // Events.on(engine, 'collisionActive', function (event) {
-    //   reward += config.collisionPenalty;
-    // })
+    Events.on(engine, 'collisionStart', (event) => {
+      this.car.collisions++;
+      if (this.car.collisions > 5) {
+        this.done = true;
+      }
+    });
 
     // run the engine
     Engine.run(engine);
@@ -71,13 +72,11 @@ class BasicEnvironment {
   }
 
   async run() {
-    let done = false;
-
     let state = this.car.getState();
     reward = this.rewardEnvironment.getReward(this.car);
     this.car.act(state, reward);
 
-    if (this.isMaster && (actorCritic.step > 1000 || done || reward < -10000)) {
+    if (this.isMaster && (actorCritic.step > 2000 || this.done || reward < -10000)) {
       actorCritic.convertRawTrainingHistory();
 
       await actorCritic.trainModel();
@@ -99,14 +98,16 @@ class BasicEnvironment {
         }
         localStorage.setItem('historyData', JSON.stringify(historyData));
 
-        config.epsilon = Math.max(Math.min(1, (400 - actorCritic.step) * (1 - config.minEpsilon) / 400), config.minEpsilon);
+        config.epsilon = Math.max(0, (200 - actorCritic.episode)/200);
         saveConfigToStorage();
 
         window.location.href = window.location.href.split('#')[0];
       });
 
     } else {
-      setTimeout(this.run.bind(this), 50 / this.multiplier);
+      if (!this.done) {
+        setTimeout(this.run.bind(this), 50 / this.multiplier);
+      }
     }
   }
 }
