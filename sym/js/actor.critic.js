@@ -108,12 +108,13 @@ class ActorCritic {
     }
 
     let action = chance.weighted(actions, weights);
+    let agentAction = action;
 
     if (Math.random() < this.config.epsilon) {
       action = chance.weighted(actions, [1, 1, 1]);
     }
 
-    return action;
+    return {action, agentAction};
   }
 
   bufferReplay(previousState, previousAction, reward, state, pushToChart) {

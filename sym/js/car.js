@@ -15,6 +15,7 @@ class Car {
     this.maxDistance = 100;
     this.previousState = this.state = [];
     this.previousAction = ACTION_FORWARD;
+    this.previousAgentAction = ACTION_FORWARD;
     this.pushToChart = pushToChart;
     this.collisions = 0;
     this.perceptionChart = new PerceptionChart(environment.name, 350, 15);
@@ -66,9 +67,9 @@ class Car {
     this.state.push(state);
     this.state.shift();
 
-    let action = actorCritic.getAction(this.state, actions, this.pushToChart);
+    let {action, agentAction} = actorCritic.getAction(this.state, actions, this.pushToChart);
 
-    this.perceptionChart.update(normalizer.normalizeFeatures(this.previousState), this.previousAction, reward);
+    this.perceptionChart.update(normalizer.normalizeFeatures(this.previousState), this.previousAgentAction, reward);
 
     if (this.previousState.length > 0) {
       this.actorCritic.bufferReplay([...this.previousState], this.previousAction, reward, [...this.state], this.pushToChart);
@@ -78,6 +79,7 @@ class Car {
 
     this.applyAction(action);
     this.previousAction = action;
+    this.previousAgentAction = agentAction;
 
     return action;
   }
