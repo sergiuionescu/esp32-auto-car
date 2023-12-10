@@ -59,6 +59,21 @@ function resetHistoryChart() {
   historyChart.update();
 }
 
+function updateHistoryChart(historyData) {
+  resetHistoryChart();
+
+  if(!('averageActorLoss' in historyData)) {
+    return;
+  }
+
+  historyChart.data.labels = Object.keys(historyData["averageActorLoss"]);
+  historyChart.data.datasets[0].data = historyData['averageActorLoss'];
+  historyChart.data.datasets[1].data = historyData['averageCriticLoss'];
+  historyChart.data.datasets[2].data = historyData['averageReward'];
+
+  historyChart.update();
+}
+
 function pushToHistoryChart(loss, type) {
   if (type === 'actor') {
     historyChart.data.datasets[0].data.push(loss);

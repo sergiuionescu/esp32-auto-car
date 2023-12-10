@@ -121,6 +121,7 @@ class BasicEnvironment {
           setTimeout(environment.run.bind(environment), 1000);
         }
         document.getElementById('episode').innerText = this.car.actorCritic.episode;
+        updateHistoryChart(localStorage.getItem('historyData') ? JSON.parse(localStorage.getItem('historyData')): [])
         updateConfigUi();
       });
 
