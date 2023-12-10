@@ -126,6 +126,11 @@ class Car {
     Matter.Body.setAngle(this.carBody, 0);
     Matter.Body.setSpeed(this.carBody, 0);
 
+    this.state = [];
+    for (let i = 0; i < config.activeHistoryLength; i++) {
+      this.state.push([this.maxDistance, this.maxDistance, this.maxDistance]);
+    }
+
     this.collisions = 0;
   }
 }
