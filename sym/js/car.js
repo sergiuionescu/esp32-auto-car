@@ -9,6 +9,7 @@ class Car {
   constructor(environment, collisionBoxes, actorCritic, position = {x: 100, y: 175}, pushToChart = false) {
 
     this.environment = environment;
+    this.originalPosition = position;
     this.carLength = 25;
     this.carWidth = this.carLength / 5 * 3;
     this.actorCritic = actorCritic;
@@ -120,4 +121,11 @@ class Car {
     }, {x: rightForce * Math.cos(this.carBody.angle), y: rightForce * Math.sin(this.carBody.angle)});
   }
 
+  reset () {
+    Matter.Body.setPosition(this.carBody, this.originalPosition);
+    Matter.Body.setAngle(this.carBody, 0);
+    Matter.Body.setSpeed(this.carBody, 0);
+
+    this.collisions = 0;
+  }
 }

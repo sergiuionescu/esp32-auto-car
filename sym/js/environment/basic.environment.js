@@ -1,10 +1,14 @@
 class BasicEnvironment {
-  constructor(containerId, additionalObstacles = [], carPosition = null, isMaster = false) {
+  constructor(containerId, getObstacles, carPosition = null, isMaster = false, environments = []) {
     this.multiplier = 1;
     this.rewardEnvironment = new RewardEnvironment();
     this.isMaster = isMaster;
     this.name = containerId;
     this.done = false;
+    this.environments = environments
+    this.getObstacles = getObstacles;
+    this.obstacles = [];
+    this.timeouts = [];
 
     let Engine = Matter.Engine,
       Render = Matter.Render,
@@ -13,8 +17,8 @@ class BasicEnvironment {
       Bodies = Matter.Bodies;
 
     // create an engine
-    let engine = Engine.create();
-    engine.world.gravity.y = 0;
+    this.engine = Engine.create();
+    this.engine.world.gravity.y = 0;
 
     // create a renderer
     let environmentWidth = 500;
@@ -24,7 +28,7 @@ class BasicEnvironment {
     }
     let render = Render.create({
       element: document.getElementById(containerId),
-      engine: engine,
+      engine: this.engine,
       options: {
         showAngleIndicator: false,
         showDebug: false,
@@ -36,12 +40,7 @@ class BasicEnvironment {
       }
     });
 
-    // create two boxes and a ground
-    let boxes = [];
-
-    for(let box of additionalObstacles) {
-      boxes.push(box);
-    }
+    let boxes = this.createObstacles();
     let wallB = Bodies.rectangle(environmentWidth / 2, environmentHeight, environmentWidth + 10, 20, {isStatic: true});
     let wallT = Bodies.rectangle(environmentWidth / 2, 0, environmentWidth + 10, 20, {isStatic: true});
     let wallL = Bodies.rectangle(0, 205, 20, environmentWidth + 10, {isStatic: true});
@@ -55,9 +54,9 @@ class BasicEnvironment {
     boxes.push(this.car.carBody);
 
     // add all the bodies to the world
-    World.add(engine.world, boxes);
+    World.add(this.engine.world, boxes);
 
-    Events.on(engine, 'collisionStart', (event) => {
+    Events.on(this.engine, 'collisionStart', (event) => {
       this.car.collisions++;
       if (this.car.collisions > 5) {
         this.done = true;
@@ -65,13 +64,25 @@ class BasicEnvironment {
     });
 
     // run the engine
-    Engine.run(engine);
+    Engine.run(this.engine);
 
     // run the renderer
     Render.run(render);
   }
 
+  createObstacles() {
+    this.obstacles = [];
+    let boxes = [];
+    for (let box of this.getObstacles()) {
+      this.obstacles.push(box);
+      boxes.push(box);
+    }
+
+    return boxes;
+  }
+
   async run() {
+    this.timeouts.pop();
     let state = this.car.getState();
     reward = this.rewardEnvironment.getReward(this.car);
     this.car.act(state, reward);
@@ -101,13 +112,35 @@ class BasicEnvironment {
         config.epsilon = Math.max(0, (200 - actorCritic.episode)/200);
         saveConfigToStorage();
 
-        window.location.href = window.location.href.split('#')[0];
+        this.car.actorCritic.reset();
+
+        for (let environment of this.environments) {
+          environment.reset();
+          environment.done = false;
+
+          setTimeout(environment.run.bind(environment), 1000);
+        }
+        document.getElementById('episode').innerText = this.car.actorCritic.episode;
       });
 
     } else {
       if (!this.done) {
-        setTimeout(this.run.bind(this), 50 / this.multiplier);
+        this.timeouts.push(setTimeout(this.run.bind(this), 50 / this.multiplier));
       }
     }
+  }
+
+  reset() {
+    this.car.reset();
+
+    for(let timeout of this.timeouts) {
+      clearTimeout(timeout);
+    }
+
+    for (let obstacle of this.obstacles) {
+      Matter.Composite.remove(this.engine.world, obstacle);
+    }
+    let boxes = this.createObstacles();
+    Matter.World.add(this.engine.world, boxes);
   }
 }

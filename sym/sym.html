@@ -230,36 +230,56 @@
 <script>
   let environmentWidth = 500;
   let environmentHeight = 350;
-  let done = false;
+  let environments = [];
 
-  let basicEnvironment = new BasicEnvironment('basicEnvironment', [], null,  true);
-
-  let randomObstacles = [];
-  for (let i = 0; i < config.obstacles; i++) {
-    let box = Matter.Bodies.polygon(200 + 250 * Math.random(), 350 * Math.random(), parseInt(3 + 5 * Math.random()), 10 + 50 * Math.random(), {isStatic: true});
-    randomObstacles.push(box);
+  function getBasicObstacles() {
+    return [];
   }
-  let randomEnvironment = new BasicEnvironment('randomEnvironment', randomObstacles);
 
+  let basicEnvironment = new BasicEnvironment('basicEnvironment', getBasicObstacles, null,  true, environments);
 
-  let leftMazeObstacles = [];
-  for (let i = 0; i < 3; i++) {
-    let rectangle = Matter.Bodies.rectangle(-200 * ((i+1)%2) + 100 + environmentWidth/2,  environmentHeight/3 * i, environmentWidth + 10, 10, {isStatic: true});
-    leftMazeObstacles.push(rectangle);
+  function getRandomObstacles() {
+    let randomObstacles = [];
+    for (let i = 0; i < config.obstacles; i++) {
+      let box = Matter.Bodies.polygon(200 + 250 * Math.random(), 350 * Math.random(), parseInt(3 + 5 * Math.random()), 10 + 50 * Math.random(), {isStatic: true});
+      randomObstacles.push(box);
+    }
+    return randomObstacles;
   }
-  let leftMazeEnvironment = new BasicEnvironment('leftMazeEnvironment', leftMazeObstacles, {x: 50, y: 275});
 
-  let rightMazeObstacles = [];
-  for (let i = 0; i < 3; i++) {
-    let rectangle = Matter.Bodies.rectangle(-200 * (i%2) + 100 + environmentWidth/2,  environmentHeight/3 * i, environmentWidth + 10, 10, {isStatic: true});
-    rightMazeObstacles.push(rectangle);
+  let randomEnvironment = new BasicEnvironment('randomEnvironment', getRandomObstacles);
+
+
+  function getLeftMazeObstacles() {
+    let leftMazeObstacles = [];
+    for (let i = 0; i < 3; i++) {
+      let rectangle = Matter.Bodies.rectangle(-200 * ((i + 1) % 2) + 100 + environmentWidth / 2, environmentHeight / 3 * i, environmentWidth + 10, 10, {isStatic: true});
+      leftMazeObstacles.push(rectangle);
+    }
+    return leftMazeObstacles;
   }
-  let rightMazeEnvironment = new BasicEnvironment('rightMazeEnvironment', rightMazeObstacles, {x: 50, y: 50});
 
-  basicEnvironment.run();
-  randomEnvironment.run();
-  leftMazeEnvironment.run();
-  rightMazeEnvironment.run();
+  let leftMazeEnvironment = new BasicEnvironment('leftMazeEnvironment', getLeftMazeObstacles, {x: 50, y: 275});
+
+  function getRightMazeObstacles() {
+    let rightMazeObstacles = [];
+    for (let i = 0; i < 3; i++) {
+      let rectangle = Matter.Bodies.rectangle(-200 * (i % 2) + 100 + environmentWidth / 2, environmentHeight / 3 * i, environmentWidth + 10, 10, {isStatic: true});
+      rightMazeObstacles.push(rectangle);
+    }
+    return rightMazeObstacles;
+  }
+
+  let rightMazeEnvironment = new BasicEnvironment('rightMazeEnvironment', getRightMazeObstacles, {x: 50, y: 50});
+
+  environments.push(basicEnvironment);
+  environments.push(randomEnvironment);
+  environments.push(leftMazeEnvironment);
+  environments.push(rightMazeEnvironment);
+
+  for(let environment of environments) {
+    environment.run();
+  }
 </script>
 <script>
   function updateConfigUi() {

@@ -33,7 +33,6 @@ class ActorCritic {
       'targets': []
     };
 
-
     this.step = 0;
     this.latestActorLoss = 0;
     this.latestCriticLoss = 0;
@@ -204,7 +203,7 @@ class ActorCritic {
       pushToHistoryChart(logs.loss, 'critic')
     }
 
-    await this.actor.fit(tfState, advantages, {
+    let actorResult = await this.actor.fit(tfState, advantages, {
       epochs: epochs,
       batchSize: batchSize,
       callbacks: {
@@ -217,7 +216,7 @@ class ActorCritic {
       }
     );
 
-    await this.critic.fit(tfState, targets, {
+    let criticResult = await this.critic.fit(tfState, targets, {
       epochs: epochs,
       batchSize: batchSize,
       callbacks: {
@@ -238,8 +237,8 @@ class ActorCritic {
     this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
     this.episode++;
 
-    let stateAdvantagesSize = parseInt(3000000 / JSON.stringify(this.stateAdvantages).length);
-    localStorage.setItem('stateAdvantages', JSON.stringify(this.stateAdvantages));
+    let stateAdvantagesSize = parseInt(3000000 / JSON.stringify(Object.entries(this.stateAdvantages)[0]).length);
+    localStorage.setItem('stateAdvantages', JSON.stringify(Object.fromEntries(Object.entries(this.stateAdvantages).slice(-stateAdvantagesSize))));
     localStorage.setItem('episode', this.episode);
     localStorage.setItem('averageReward', this.averageReward);
     localStorage.setItem('name', this.name);
@@ -286,5 +285,15 @@ class ActorCritic {
       sum += list[i];
     }
     return sum / list.length;
+  }
+
+  reset() {
+    this.replayBuffer = [];
+    this.step = 0;
+    this.trainingBuffer = {
+      'tfState': [],
+      'advantages': [],
+      'targets': []
+    };
   }
 }
