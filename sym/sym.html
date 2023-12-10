@@ -318,6 +318,11 @@
   document.getElementById('download').onclick = function () {
     actorCritic.actor.save('downloads://actor');
     actorCritic.critic.save('downloads://critic');
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL( new Blob([JSON.stringify(actorCritic.stateAdvantages)], { type:'text/json' }) );
+    a.download = 'stateAdvantages.json';
+    a.click();
   };
   updateConfigUi();
 </script>
