@@ -57,9 +57,9 @@
     <div class="col">
         <h4>Environment</h4>
       <div class="form-floating">
-        <input class="form-control" id="maxReplayBufferSize"
-                 aria-describedby="Max replay buffer size">
-        <label for="maxReplayBufferSize" class="form-control">Max replay buffer size</label>
+        <input class="form-control" id="episodeLength"
+                 aria-describedby="Episode length">
+        <label for="episodeLength" class="form-control">Episode length</label>
       </div>
       <div class="form-floating">
         <input class="form-control" id="obstacles"
@@ -199,7 +199,7 @@
     criticLearningRate: 0.005,
     epsilon: 0.9,
     minEpsilon: 0.1,
-    maxReplayBufferSize: 1800,
+    episodeLength: 1000,
   }
   if (localStorage.getItem('config')) {
     let savedConfig = JSON.parse(localStorage.getItem('config'));
@@ -236,7 +236,7 @@
     return [];
   }
 
-  let basicEnvironment = new BasicEnvironment('basicEnvironment', getBasicObstacles, null,  true, environments);
+  let basicEnvironment = new BasicEnvironment('basicEnvironment', getBasicObstacles, config.episodeLength, null,  true, environments);
 
   function getRandomObstacles() {
     let randomObstacles = [];
@@ -247,7 +247,7 @@
     return randomObstacles;
   }
 
-  let randomEnvironment = new BasicEnvironment('randomEnvironment', getRandomObstacles);
+  let randomEnvironment = new BasicEnvironment('randomEnvironment', getRandomObstacles, config.episodeLength);
 
 
   function getLeftMazeObstacles() {
@@ -259,7 +259,7 @@
     return leftMazeObstacles;
   }
 
-  let leftMazeEnvironment = new BasicEnvironment('leftMazeEnvironment', getLeftMazeObstacles, {x: 50, y: 275});
+  let leftMazeEnvironment = new BasicEnvironment('leftMazeEnvironment', getLeftMazeObstacles, config.episodeLength, {x: 50, y: 275});
 
   function getRightMazeObstacles() {
     let rightMazeObstacles = [];
@@ -270,7 +270,7 @@
     return rightMazeObstacles;
   }
 
-  let rightMazeEnvironment = new BasicEnvironment('rightMazeEnvironment', getRightMazeObstacles, {x: 50, y: 50});
+  let rightMazeEnvironment = new BasicEnvironment('rightMazeEnvironment', getRightMazeObstacles, config.episodeLength, {x: 50, y: 50});
 
   environments.push(basicEnvironment);
   environments.push(randomEnvironment);

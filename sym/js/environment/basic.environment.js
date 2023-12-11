@@ -1,5 +1,5 @@
 class BasicEnvironment {
-  constructor(containerId, getObstacles, carPosition = null, isMaster = false, environments = []) {
+  constructor(containerId, getObstacles, episodeLength, carPosition = null, isMaster = false, environments = []) {
     this.multiplier = 1;
     this.rewardEnvironment = new RewardEnvironment();
     this.isMaster = isMaster;
@@ -9,6 +9,7 @@ class BasicEnvironment {
     this.getObstacles = getObstacles;
     this.obstacles = [];
     this.timeouts = [];
+    this.episodeLength = episodeLength;
 
     let Engine = Matter.Engine,
       Render = Matter.Render,
@@ -41,14 +42,13 @@ class BasicEnvironment {
     });
 
     let boxes = this.createObstacles();
+    this.walls = [];
     let wallB = Bodies.rectangle(environmentWidth / 2, environmentHeight, environmentWidth + 10, 20, {isStatic: true});
     let wallT = Bodies.rectangle(environmentWidth / 2, 0, environmentWidth + 10, 20, {isStatic: true});
     let wallL = Bodies.rectangle(0, 205, 20, environmentWidth + 10, {isStatic: true});
     let wallR = Bodies.rectangle(environmentWidth, 205, 20, environmentWidth + 10, {isStatic: true});
-    boxes.push(wallB);
-    boxes.push(wallT);
-    boxes.push(wallL);
-    boxes.push(wallR);
+    this.walls.push(wallB, wallT, wallL, wallR);
+    boxes.push(wallB, wallT, wallL, wallR);
 
     this.car = new Car(this, boxes, actorCritic, carPosition,  this.isMaster);
     boxes.push(this.car.carBody);
@@ -87,7 +87,7 @@ class BasicEnvironment {
     reward = this.rewardEnvironment.getReward(this.car);
     this.car.act(state, reward);
 
-    if (this.isMaster && (actorCritic.step > 2000 || this.done || reward < -10000)) {
+    if (this.isMaster && (actorCritic.step > this.episodeLength || this.done || reward < -10000)) {
       actorCritic.convertRawTrainingHistory();
 
       await actorCritic.trainModel();
@@ -133,16 +133,16 @@ class BasicEnvironment {
   }
 
   reset() {
-    this.car.reset();
-
-    for(let timeout of this.timeouts) {
-      clearTimeout(timeout);
-    }
-
     for (let obstacle of this.obstacles) {
       Matter.Composite.remove(this.engine.world, obstacle);
     }
     let boxes = this.createObstacles();
     Matter.World.add(this.engine.world, boxes);
+
+    this.car.reset([...this.walls, ...boxes]);
+
+    for(let timeout of this.timeouts) {
+      clearTimeout(timeout);
+    }
   }
 }
