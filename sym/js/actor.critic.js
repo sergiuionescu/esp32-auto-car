@@ -289,6 +289,7 @@ class ActorCritic {
 
   reset() {
     this.replayBuffer = [];
+    this.rewards = [];
     this.step = 0;
     this.trainingBuffer = {
       'tfState': [],
