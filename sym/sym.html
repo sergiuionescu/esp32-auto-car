@@ -34,7 +34,8 @@
       <button class='btn' id='download' name='download'><i class='fa fa-download'> Download</i></button>
       <button class='btn' id='pretrained' name='pretrained'><i class='fa fa-hdd-o'> Load pretrained model</i></button>
        Episode: <span id="episode">0</span>
-      | Localstorage Usage <span id="localStorage">0</span> MB
+      | Localstorage Backup Usage <span id="localStorage">0</span> MB
+      | Memory Usage <span id="memoryUsage">0</span> MB
     </div>
   </div>
   <div class="row">
@@ -158,6 +159,7 @@
   }
 
   document.getElementById('localStorage').innerText = (localStorageSize/1024/1024).toFixed(2);
+  document.getElementById('memoryUsage').innerText = Math.round(window.performance.memory.totalJSHeapSize/1024/1024) + '/' + Math.round(window.performance.memory.jsHeapSizeLimit/1024/1024);
 </script>
 <script>
   let reset = window.location.hash.substr(1) === 'reset';

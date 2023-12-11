@@ -121,6 +121,7 @@ class BasicEnvironment {
           setTimeout(environment.run.bind(environment), 1000);
         }
         document.getElementById('episode').innerText = this.car.actorCritic.episode;
+        document.getElementById('memoryUsage').innerText = Math.round(window.performance.memory.totalJSHeapSize/1024/1024) + '/' + Math.round(window.performance.memory.jsHeapSizeLimit/1024/1024);
         updateHistoryChart(localStorage.getItem('historyData') ? JSON.parse(localStorage.getItem('historyData')): [])
         updateConfigUi();
       });
