@@ -64,7 +64,7 @@ class BasicEnvironment {
     });
 
     // run the engine
-    Engine.run(this.engine);
+    Matter.Runner.run(this.engine);
 
     // run the renderer
     Render.run(render);

@@ -48,7 +48,8 @@ class ActorCritic {
       const loss = tf.mul(logProb, advantages);
 
       // Take the negative of the mean (since we want to maximize expected returns)
-      return tf.neg(tf.mean(loss));
+      const negLoss = tf.neg(tf.mean(loss));
+      return negLoss;
     });
   }
 
@@ -96,7 +97,8 @@ class ActorCritic {
 
   getAction(state, actions, pushToChart = false) {
     let normalizeFeatures = normalizer.normalizeFeatures(state);
-    let policy = this.actor.predict(tf.tensor2d(normalizeFeatures, [1, state.length * state[0].length]), {
+    let stateTensor = tf.tensor2d(normalizeFeatures, [1, state.length * state[0].length]);
+    let policy = this.actor.predict(stateTensor, {
       batchSize: 1,
     });
 
@@ -112,6 +114,9 @@ class ActorCritic {
     if (Math.random() < this.config.epsilon) {
       action = chance.weighted(actions, [1, 1, 1]);
     }
+
+    policy.dispose();
+    stateTensor.dispose();
 
     return {action, agentAction};
   }
@@ -166,11 +171,13 @@ class ActorCritic {
   computeTrainingData(previousState, state, reward, pushToChart = true) {
     let normalizedPreviousState = normalizer.normalizeFeatures(previousState);
     let tfPreviousState = tf.tensor2d(normalizedPreviousState, [1, normalizedPreviousState.length]);
-    let predictedPreviousStateValue = this.critic.predict(tfPreviousState).dataSync();
+    const tfPredictedPreviousStateValue =  this.critic.predict(tfPreviousState);
+    let predictedPreviousStateValue = tfPredictedPreviousStateValue.dataSync();
 
     let normalizedState = normalizer.normalizeFeatures(state);
     let tfState = tf.tensor2d(normalizedState, [1, normalizedState.length]);
-    let predictedStateValue = this.critic.predict(tfState).dataSync();
+    let tfPredictedStateValue = this.critic.predict(tfState);
+    let predictedStateValue = tfPredictedStateValue.dataSync();
 
     let target = reward + config.discountFactor * predictedStateValue;
     let advantage = target - predictedPreviousStateValue;
@@ -178,6 +185,11 @@ class ActorCritic {
     if (pushToChart) {
       pushToRewardChart(actorCritic.step, reward, parseFloat(predictedPreviousStateValue), parseFloat(predictedStateValue), advantage, target);
     }
+
+    tfPreviousState.dispose();
+    tfPredictedPreviousStateValue.dispose();
+    tfState.dispose();
+    tfPredictedStateValue.dispose();
 
     return {normalizedState: normalizedPreviousState, target, advantage};
   }
@@ -203,7 +215,7 @@ class ActorCritic {
       pushToHistoryChart(logs.loss, 'critic')
     }
 
-    let actorResult = await this.actor.fit(tfState, advantages, {
+    await this.actor.fit(tfState, advantages, {
       epochs: epochs,
       batchSize: batchSize,
       callbacks: {
@@ -216,7 +228,7 @@ class ActorCritic {
       }
     );
 
-    let criticResult = await this.critic.fit(tfState, targets, {
+    await this.critic.fit(tfState, targets, {
       epochs: epochs,
       batchSize: batchSize,
       callbacks: {
@@ -228,6 +240,10 @@ class ActorCritic {
         this.criticLosses.push(this.latestCriticLoss[0]);
       }
     );
+
+    tfState.dispose();
+    advantages.dispose()
+    targets.dispose();
   }
 
   async save() {
