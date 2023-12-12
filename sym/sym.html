@@ -210,11 +210,18 @@
     }
   }
   let normalizer = new Normalizer(10);
+  const doReset = window.location.hash.substr(1) === 'reset';
+  if (doReset) {
+    let uri = window.location.toString();
+    setTimeout(() => {
+      window.history.replaceState({}, document.title, uri.substring(0, uri.indexOf("#")));
+    }, 2000);
+  }
   let actorCritic = new ActorCritic(
     3,
     config.activeHistoryLength,
     3,
-    window.location.hash.substr(1) === 'reset',
+    doReset,
     window.location.hash.substr(1) === 'act',
     config
   );
