@@ -28,6 +28,13 @@ function createHistoryChart(historyData) {
           fill: false,
           borderColor: "#1634a0",
           data: historyData['averageReward']
+        },
+        {
+          label: 'Test Reward',
+          yAxisID: 'y-axis-1',
+          fill: false,
+          borderColor: "#e7cb3c",
+          data: historyData['averageTestReward']
         }
       ]
     },
@@ -55,6 +62,7 @@ function resetHistoryChart() {
   historyChart.data.datasets[0].data = [];
   historyChart.data.datasets[1].data = [];
   historyChart.data.datasets[2].data = [];
+  historyChart.data.datasets[3].data = [];
 
   historyChart.update();
 }
@@ -70,6 +78,7 @@ function updateHistoryChart(historyData) {
   historyChart.data.datasets[0].data = historyData['averageActorLoss'];
   historyChart.data.datasets[1].data = historyData['averageCriticLoss'];
   historyChart.data.datasets[2].data = historyData['averageReward'];
+  historyChart.data.datasets[3].data = historyData['averageTestReward'];
 
   historyChart.update();
 }

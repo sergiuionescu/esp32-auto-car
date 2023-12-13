@@ -88,11 +88,11 @@ class BasicEnvironment {
     this.car.act(state, reward);
 
     if (this.isMaster && (actorCritic.step > this.episodeLength || this.done || reward < -10000)) {
-      actorCritic.convertRawTrainingHistory();
+      if (!actorCritic.test) {
+        actorCritic.convertRawTrainingHistory();
+        await actorCritic.trainModel();
+        await actorCritic.save();
 
-      await actorCritic.trainModel();
-
-      actorCritic.save().then(() => {
         historyData['averageActorLoss'].push(
           actorCritic.getAverageActorLoss()
         );
@@ -106,25 +106,30 @@ class BasicEnvironment {
           historyData['averageActorLoss'].shift();
           historyData['averageCriticLoss'].shift();
           historyData['averageReward'].shift();
+          historyData['averageTestReward'].shift();
         }
-        localStorage.setItem('historyData', JSON.stringify(historyData));
+      } else {
+        historyData['averageTestReward'].push(
+          actorCritic.getAverageTestReward()
+        );
+      }
 
-        config.epsilon = Math.max(0, (200 - actorCritic.episode)/200);
-        saveConfigToStorage();
+      localStorage.setItem('historyData', JSON.stringify(historyData));
+      config.epsilon = Math.max(0, (200 - actorCritic.episode) / 200);
+      saveConfigToStorage();
 
-        this.car.actorCritic.reset();
+      this.car.actorCritic.reset();
 
-        for (let environment of this.environments) {
-          environment.reset();
-          environment.done = false;
+      for (let environment of this.environments) {
+        environment.reset();
+        environment.done = false;
 
-          setTimeout(environment.run.bind(environment), 1000);
-        }
-        document.getElementById('episode').innerText = this.car.actorCritic.episode;
-        document.getElementById('memoryUsage').innerText = Math.round(window.performance.memory.totalJSHeapSize/1024/1024) + '/' + Math.round(window.performance.memory.jsHeapSizeLimit/1024/1024);
-        updateHistoryChart(localStorage.getItem('historyData') ? JSON.parse(localStorage.getItem('historyData')): [])
-        updateConfigUi();
-      });
+        setTimeout(environment.run.bind(environment), 1000);
+      }
+      document.getElementById('episode').innerText = this.car.actorCritic.episode;
+      document.getElementById('memoryUsage').innerText = Math.round(window.performance.memory.totalJSHeapSize / 1024 / 1024) + '/' + Math.round(window.performance.memory.jsHeapSizeLimit / 1024 / 1024);
+      updateHistoryChart(localStorage.getItem('historyData') ? JSON.parse(localStorage.getItem('historyData')) : [])
+      updateConfigUi();
 
     } else {
       if (!this.done) {

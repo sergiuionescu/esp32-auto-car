@@ -167,7 +167,8 @@
   && !reset ? JSON.parse(localStorage.getItem('historyData')) : {
     'averageActorLoss': [],
     'averageCriticLoss': [],
-    'averageReward': []
+    'averageReward': [],
+    'averageTestReward': [],
   };
   let reward = 0;
 
@@ -222,7 +223,7 @@
     config.activeHistoryLength,
     3,
     doReset,
-    window.location.hash.substr(1) === 'act',
+    false,
     config
   );
   document.getElementById("name").innerHTML = actorCritic.name;

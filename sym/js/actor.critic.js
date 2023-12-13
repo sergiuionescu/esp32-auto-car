@@ -1,5 +1,5 @@
 class ActorCritic {
-  constructor(featureCount, historyLength, actionSize, reset, act, config) {
+  constructor(featureCount, historyLength, actionSize, reset, test, config) {
     this.render = false;
     this.featureCount = featureCount;
     this.historyLength = historyLength;
@@ -8,7 +8,7 @@ class ActorCritic {
     this.stateAdvantages = {};
     this.trainingBufferKeys = {};
     this.valueSize = 1;
-    this.act = act;
+    this.test = test;
 
     this.episode = 0;
     this.averageReward = 0;
@@ -40,6 +40,7 @@ class ActorCritic {
     this.actorLosses = [];
     this.criticLosses = [];
     this.rewards = [];
+    this.testRewards = [];
   }
 
   customActorLoss(logProb, advantages) {
@@ -111,7 +112,7 @@ class ActorCritic {
     let action = chance.weighted(actions, weights);
     let agentAction = action;
 
-    if (Math.random() < this.config.epsilon) {
+    if (Math.random() < this.config.epsilon && !this.test) {
       action = chance.weighted(actions, [1, 1, 1]);
     }
 
@@ -122,6 +123,9 @@ class ActorCritic {
   }
 
   bufferReplay(previousState, previousAction, reward, state, pushToChart) {
+    if (this.test) {
+      this.testRewards.push(reward);
+    }
     this.replayBuffer.push({'ps': previousState, 'pa': previousAction, 'r': reward, 's': state});
     this.computeTrainingData(previousState, state, reward, pushToChart);
 
@@ -295,6 +299,10 @@ class ActorCritic {
     return this.getAverage(this.rewards);
   }
 
+  getAverageTestReward() {
+    return this.getAverage(this.testRewards);
+  }
+
   getAverage(list) {
     let sum = 0;
     for (let i = 0; i < list.length; i++) {
@@ -307,7 +315,9 @@ class ActorCritic {
     this.replayBuffer = [];
     this.trainingBufferKeys = {};
     this.rewards = [];
+    this.testRewards = [];
     this.step = 0;
+    this.test = !this.test;
     this.trainingBuffer = {
       'tfState': [],
       'advantages': [],
