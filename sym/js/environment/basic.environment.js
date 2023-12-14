@@ -58,7 +58,7 @@ class BasicEnvironment {
 
     Events.on(this.engine, 'collisionStart', (event) => {
       this.car.collisions++;
-      if (this.car.collisions > 5) {
+      if (this.car.collisions > (this.car.actorCritic.test ? 0 : 5)) {
         this.done = true;
       }
     });
