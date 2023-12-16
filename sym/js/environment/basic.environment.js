@@ -110,6 +110,8 @@ class BasicEnvironment {
           historyData['averageCriticLoss'].shift();
           historyData['averageReward'].shift();
           historyData['averageTestReward'].shift();
+          historyData['totalTrainReward'].shift();
+          historyData['totalTestReward'].shift();
         }
       } else {
         historyData['averageTestReward'].push(
