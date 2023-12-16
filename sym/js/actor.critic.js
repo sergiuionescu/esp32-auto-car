@@ -303,6 +303,24 @@ class ActorCritic {
     return this.getAverage(this.testRewards);
   }
 
+  getTotalTrainReward() {
+    let sum = 0;
+    for(let reward of this.rewards) {
+      sum += reward;
+    }
+
+    return sum;
+  }
+
+  getTotalTestReward() {
+    let sum = 0;
+    for(let reward of this.testRewards) {
+      sum += reward;
+    }
+
+    return sum;
+  }
+
   getAverage(list) {
     let sum = 0;
     for (let i = 0; i < list.length; i++) {

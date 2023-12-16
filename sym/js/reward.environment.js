@@ -18,6 +18,13 @@ class RewardEnvironment {
     if (car.previousAction === ACTION_BACK) {
       reward -= sensorDistanceMax / 10;
     }
+    if(
+      car.actionBeforePrevious === ACTION_LEFT && car.previousAction === ACTION_RIGHT
+      || car.actionBeforePrevious === ACTION_RIGHT && car.previousAction === ACTION_LEFT
+    ) {
+      reward -= 10;
+    }
+
     reward -= car.maxDistance - sensorDistanceFM;
     reward -= car.maxDistance - sensorDistanceFL;
     reward -= car.maxDistance - sensorDistanceFR;

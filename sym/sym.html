@@ -49,6 +49,7 @@
     </div>
     <div class="col-sm" style="width: 350px;">
       <div id="reward-chart"></div>
+      <div id="total-reward-container"></div>
       <div id="training-history-container"></div>
       <div id="weights"></div>
       <div id="sensors" style="width: 350px;"></div>
@@ -142,6 +143,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
 <script src="js/perception.chart.js"></script>
 <script src="js/reward.chart.js"></script>
+<script src="js/total.chart.js"></script>
 <script src="js/history.chart.js"></script>
 <script src="js/weights.chart.js"></script>
 <script src="js/reward.environment.js"></script>
@@ -169,6 +171,8 @@
     'averageCriticLoss': [],
     'averageReward': [],
     'averageTestReward': [],
+    'totalTrainReward': [],
+    'totalTestReward': [],
   };
   let reward = 0;
 
@@ -234,6 +238,7 @@
     rewardChart,
     weightsChart;
   createHistoryChart(historyData);
+  createTotalChart(historyData);
   createRewardChart();
   createWeightsChart();
 </script>

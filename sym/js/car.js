@@ -16,6 +16,7 @@ class Car {
     this.maxDistance = 100;
     this.previousState = this.state = [];
     this.previousAction = ACTION_FORWARD;
+    this.actionBeforePrevious = ACTION_FORWARD;
     this.previousAgentAction = ACTION_FORWARD;
     this.pushToChart = pushToChart;
     this.perceptionChart = new PerceptionChart(environment.name, 350, 15);
@@ -73,6 +74,7 @@ class Car {
     this.previousState = [...this.state];
 
     this.applyAction(action);
+    this.actionBeforePrevious = this.previousAction;
     this.previousAction = action;
     this.previousAgentAction = agentAction;
 

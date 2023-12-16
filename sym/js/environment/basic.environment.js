@@ -102,6 +102,9 @@ class BasicEnvironment {
         historyData['averageReward'].push(
           actorCritic.getAverageReward()
         );
+        historyData['totalTrainReward'].push(
+          actorCritic.getTotalTrainReward()
+        );
         if (historyData['averageActorLoss'].length > 50) {
           historyData['averageActorLoss'].shift();
           historyData['averageCriticLoss'].shift();
@@ -111,6 +114,9 @@ class BasicEnvironment {
       } else {
         historyData['averageTestReward'].push(
           actorCritic.getAverageTestReward()
+        );
+        historyData['totalTestReward'].push(
+          actorCritic.getTotalTestReward()
         );
       }
 
@@ -128,7 +134,9 @@ class BasicEnvironment {
       }
       document.getElementById('episode').innerText = this.car.actorCritic.episode;
       document.getElementById('memoryUsage').innerText = Math.round(window.performance.memory.totalJSHeapSize / 1024 / 1024) + '/' + Math.round(window.performance.memory.jsHeapSizeLimit / 1024 / 1024);
-      updateHistoryChart(localStorage.getItem('historyData') ? JSON.parse(localStorage.getItem('historyData')) : [])
+      let lsHistoryData = localStorage.getItem('historyData') ? JSON.parse(localStorage.getItem('historyData')) : [];
+      updateHistoryChart(lsHistoryData);
+      updateTotalChart(lsHistoryData);
       updateConfigUi();
 
     } else {
