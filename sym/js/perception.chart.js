@@ -15,13 +15,13 @@ class PerceptionChart {
     this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     const barWidth = (this.canvas.width - 30) / (state.length / 3 + 1);
-    const barHeight = this.canvas.height / 3;
+    const barHeight = this.canvas.height / 5;
 
     let offsetX = 0;
     let offsetY = 0;
 
 
-    const actionsMap = ['green', 'blue', 'red']
+    const actionsMap = ['green', 'blue', 'red', 'yellow']
     const actionColor = actionsMap[action];
 
     for (const i in state) {

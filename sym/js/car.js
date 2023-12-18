@@ -3,7 +3,7 @@ const ACTION_RIGHT = 1;
 const ACTION_LEFT = 2;
 const ACTION_BACK = 3;
 
-const actions = [ACTION_FORWARD, ACTION_RIGHT, ACTION_LEFT]
+const actions = [ACTION_FORWARD, ACTION_RIGHT, ACTION_LEFT, ACTION_BACK]
 
 class Car {
   constructor(environment, collisionBoxes, actorCritic, position = {x: 100, y: 175}, pushToChart = false) {
@@ -21,10 +21,6 @@ class Car {
     this.pushToChart = pushToChart;
     this.perceptionChart = new PerceptionChart(environment.name, 350, 15);
 
-    for (let i = 0; i < config.activeHistoryLength; i++) {
-      this.state.push([this.maxDistance, this.maxDistance, this.maxDistance]);
-    }
-
     let Bodies = Matter.Bodies,
       Body = Matter.Body,
       activeSensorColor = {
@@ -38,26 +34,28 @@ class Car {
       carWheelFR = Bodies.rectangle(carX - this.carLength / 2 + this.carLength / 3.5, carY + this.carWidth / 2, this.carLength / 3.5, this.carWidth / 3.5),
       carWheelBR = Bodies.rectangle(carX + this.carLength / 2 - this.carLength / 3.5, carY + this.carWidth / 2, this.carLength / 3.5, this.carWidth / 3.5);
 
-    this.sensorBM = Bodies.circle(carX - this.carLength / 2 + this.carLength / 15, carY, sensorRadius);
+    this.sensorBL = Bodies.circle(carX - this.carLength / 2 - this.carLength / 15 + 2 * sensorRadius, carY - this.carWidth / 2 + this.carLength * 2 / 15, sensorRadius);
+    this.sensorBR = Bodies.circle(carX - this.carLength / 2 - this.carLength / 15 + 2 * sensorRadius, carY + this.carWidth / 2 - this.carLength * 2 / 15, sensorRadius);
     this.sensorFM = Bodies.circle(carX + this.carLength / 2 - this.carLength / 15, carY, sensorRadius, activeSensorColor);
     this.sensorFL = Bodies.circle(carX + this.carLength / 2 - this.carLength / 15, carY - this.carWidth / 2 + this.carLength * 2 / 15, sensorRadius, activeSensorColor);
     this.sensorFR = Bodies.circle(carX + this.carLength / 2 - this.carLength / 15, carY + this.carWidth / 2 - this.carLength * 2 / 15, sensorRadius, activeSensorColor);
 
     this.carBody = Body.create({
-      parts: [carBody, carWheelFL, carWheelBL, carWheelFR, carWheelBR, this.sensorBM, this.sensorFM, this.sensorFL, this.sensorFR]
+      parts: [carBody, carWheelFL, carWheelBL, carWheelFR, carWheelBR, this.sensorBL, this.sensorBR, this.sensorFM, this.sensorFL, this.sensorFR]
     });
-    this.carBody.frictionAir = 0.1
+    this.carBody.frictionAir = 0.1;
 
     this.reset(collisionBoxes);
   }
 
   getState() {
-      let sensorDistanceBM = parseInt(this.colliderBM.getSensorDistance());
+    let sensorDistanceBL = parseInt(this.colliderBL.getSensorDistance());
+    let sensorDistanceBR = parseInt(this.colliderBR.getSensorDistance());
       let sensorDistanceFM = parseInt(this.colliderFM.getSensorDistance());
       let sensorDistanceFL = parseInt(this.colliderFL.getSensorDistance());
       let sensorDistanceFR = parseInt(this.colliderFR.getSensorDistance());
 
-      return [sensorDistanceFL, sensorDistanceFM, sensorDistanceFR];
+    return [sensorDistanceBL, sensorDistanceFL, sensorDistanceFM, sensorDistanceFR, sensorDistanceBR];
   }
   act(state, reward) {
     this.state.push(state);
@@ -82,6 +80,7 @@ class Car {
   }
 
   applyAction(action) {
+    this.previousPosition = {...this.carBody.position};
     let multiplier = this.carLength / 200;
 
     let leftSpeed = 0;
@@ -122,14 +121,17 @@ class Car {
     Matter.Body.setAngle(this.carBody, 0);
     Matter.Body.setSpeed(this.carBody, 0);
 
+    this.previousPosition = {...this.carBody.position};
+
     this.state = [];
     for (let i = 0; i < config.activeHistoryLength; i++) {
-      this.state.push([this.maxDistance, this.maxDistance, this.maxDistance]);
+      this.state.push([this.maxDistance, this.maxDistance, this.maxDistance, this.maxDistance, this.maxDistance]);
     }
 
     this.collisions = 0;
 
-    this.colliderBM = new Collider(collisionBoxes, this.carBody, this.sensorBM, 'sensorFM', Math.PI, 100);
+    this.colliderBL = new Collider(collisionBoxes, this.carBody, this.sensorBL, 'sensorBL', Math.PI * 3, 100);
+    this.colliderBR = new Collider(collisionBoxes, this.carBody, this.sensorBR, 'sensorBR', -Math.PI * 3, 100);
     this.colliderFM = new Collider(collisionBoxes, this.carBody, this.sensorFM, 'sensorFM', 0, 100);
     this.colliderFL = new Collider(collisionBoxes, this.carBody, this.sensorFL, 'sensorFL', -Math.PI / 6, 100);
     this.colliderFR = new Collider(collisionBoxes, this.carBody, this.sensorFR, 'sensorFR', Math.PI / 6, 100);

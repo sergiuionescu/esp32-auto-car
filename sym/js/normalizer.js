@@ -13,6 +13,8 @@
           normalized.push(this.normalizeSensorDistance(feature[0]));
           normalized.push(this.normalizeSensorDistance(feature[1]));
           normalized.push(this.normalizeSensorDistance(feature[2]));
+          normalized.push(this.normalizeSensorDistance(feature[3]));
+          normalized.push(this.normalizeSensorDistance(feature[4]));
       }, this);
 
       return normalized;

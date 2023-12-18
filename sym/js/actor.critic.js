@@ -104,7 +104,7 @@ class ActorCritic {
     });
 
     let policyFlat = policy.dataSync();
-    let weights = [parseFloat(policyFlat[ACTION_FORWARD]), parseFloat(policyFlat[ACTION_RIGHT]), parseFloat(policyFlat[ACTION_LEFT])];
+    let weights = [parseFloat(policyFlat[ACTION_FORWARD]), parseFloat(policyFlat[ACTION_RIGHT]), parseFloat(policyFlat[ACTION_LEFT]), parseFloat(policyFlat[ACTION_BACK])];
     if (pushToChart) {
       pushToWeightsChart(this.step, weights);
     }
@@ -113,7 +113,7 @@ class ActorCritic {
     let agentAction = action;
 
     if (Math.random() < this.config.epsilon && !this.test) {
-      action = chance.weighted(actions, [1, 1, 1]);
+      action = chance.weighted(actions, [1, 1, 1, 1]);
     }
 
     policy.dispose();
