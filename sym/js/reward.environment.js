@@ -18,8 +18,6 @@ class RewardEnvironment {
       reward += 3 * car.maxDistance;
     }
 
-    reward -= Math.round((car.maxDistance - sensorDistanceBL) / 2);
-    reward -= Math.round((car.maxDistance - sensorDistanceBR) / 2);
     reward -= car.maxDistance - sensorDistanceFM;
     reward -= car.maxDistance - sensorDistanceFL;
     reward -= car.maxDistance - sensorDistanceFR;

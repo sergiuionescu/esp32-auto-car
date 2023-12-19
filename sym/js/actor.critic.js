@@ -113,7 +113,7 @@ class ActorCritic {
     let agentAction = action;
 
     if (Math.random() < this.config.epsilon && !this.test) {
-      action = chance.weighted(actions, [1, 1, 1, 1]);
+      action = chance.weighted(actions, [1, 1, 1, 0.2]);
     }
 
     policy.dispose();
@@ -199,7 +199,7 @@ class ActorCritic {
   }
 
   async trainModel() {
-    let epochs = 50;
+    let epochs = 200;
     let batchSize = 64;
 
     let tfState = tf.tensor2d(
@@ -224,7 +224,7 @@ class ActorCritic {
       batchSize: batchSize,
       callbacks: {
         onEpochEnd: onActorEpochEnd,
-        earlyStopping: tf.callbacks.earlyStopping
+        earlyStopping: tf.callbacks.earlyStopping({monitor: 'loss'})
       }
     }).then(info => {
         this.latestActorLoss = info.history.loss.slice(-1);
@@ -237,7 +237,7 @@ class ActorCritic {
       batchSize: batchSize,
       callbacks: {
         onEpochEnd: onCriticEpochEnd,
-        earlyStopping: tf.callbacks.earlyStopping
+        earlyStopping: tf.callbacks.earlyStopping({monitor: 'loss'})
       }
     }).then(info => {
         this.latestCriticLoss = info.history.loss.slice(-1);
