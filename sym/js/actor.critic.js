@@ -224,7 +224,7 @@ class ActorCritic {
       batchSize: batchSize,
       callbacks: [
         new tf.CustomCallback({onEpochEnd: onActorEpochEnd}),
-        tf.callbacks.earlyStopping({monitor: 'loss', verbose: 2})
+        tf.callbacks.earlyStopping({monitor: 'loss', verbose: 2, patience: 10})
       ]
     }).then(info => {
         this.latestActorLoss = info.history.loss.slice(-1);
@@ -237,7 +237,7 @@ class ActorCritic {
       batchSize: batchSize,
       callbacks: [
         new tf.CustomCallback({onEpochEnd: onCriticEpochEnd}),
-        tf.callbacks.earlyStopping({monitor: 'loss', verbose: 2})
+        tf.callbacks.earlyStopping({monitor: 'loss', verbose: 2, patience: 10})
       ]
     }).then(info => {
         this.latestCriticLoss = info.history.loss.slice(-1);
