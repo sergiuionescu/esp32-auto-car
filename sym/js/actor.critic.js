@@ -200,7 +200,7 @@ class ActorCritic {
 
   async trainModel() {
     let epochs = 200;
-    let batchSize = 64;
+    let batchSize = 16;
 
     let tfState = tf.tensor2d(
       this.trainingBuffer['tfState'],
@@ -222,10 +222,10 @@ class ActorCritic {
     await this.actor.fit(tfState, advantages, {
       epochs: epochs,
       batchSize: batchSize,
-      callbacks: {
-        onEpochEnd: onActorEpochEnd,
-        earlyStopping: tf.callbacks.earlyStopping({monitor: 'loss'})
-      }
+      callbacks: [
+        new tf.CustomCallback({onEpochEnd: onActorEpochEnd}),
+        tf.callbacks.earlyStopping({monitor: 'loss', verbose: 2})
+      ]
     }).then(info => {
         this.latestActorLoss = info.history.loss.slice(-1);
         this.actorLosses.push(this.latestActorLoss[0]);
@@ -235,10 +235,10 @@ class ActorCritic {
     await this.critic.fit(tfState, targets, {
       epochs: epochs,
       batchSize: batchSize,
-      callbacks: {
-        onEpochEnd: onCriticEpochEnd,
-        earlyStopping: tf.callbacks.earlyStopping({monitor: 'loss'})
-      }
+      callbacks: [
+        new tf.CustomCallback({onEpochEnd: onCriticEpochEnd}),
+        tf.callbacks.earlyStopping({monitor: 'loss', verbose: 2})
+      ]
     }).then(info => {
         this.latestCriticLoss = info.history.loss.slice(-1);
         this.criticLosses.push(this.latestCriticLoss[0]);
