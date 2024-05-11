@@ -17,16 +17,14 @@
           background-color: #9a9b9b;
       }
 
-      .container {
-          width: 100%;
-          margin: 0;
-          max-width: 100%;
+      button.nav-link {
+          font-size: 12px;
       }
   </style>
 </head>
 
 <body>
-<div class="container">
+<div class="container-fluid">
   <div class="row">
     <div class="col">
       <button class='btn disabled' id='model_name' name='model_name'><i class='fa fa-info'> Model: <i id="name"></i></i>
@@ -48,79 +46,99 @@
       <div id="rightMazeEnvironment" style="float: left;"></div>
     </div>
     <div class="col-sm" style="width: 350px;">
+      <nav>
+        <div class="nav nav-tabs" id="nav-tab" role="tablist">
+          <button class="nav-link active" id="nav-environment-tab" data-bs-toggle="tab"
+                  data-bs-target="#nav-environment"
+                  type="button" role="tab" aria-controls="nav-environment" aria-selected="true">Environment
+          </button>
+          <button class="nav-link" id="nav-hyperparameters-tab" data-bs-toggle="tab"
+                  data-bs-target="#nav-hyperparameters"
+                  type="button" role="tab" aria-controls="nav-hyperparameters" aria-selected="false">Hyperparameters
+          </button>
+          <button class="nav-link" id="nav-new-model-tab" data-bs-toggle="tab" data-bs-target="#nav-new-model"
+                  type="button" role="tab" aria-controls="nav-new-model" aria-selected="false">New Model
+          </button>
+          <button class="nav-link" id="nav-charts-tab" data-bs-toggle="tab" data-bs-target="#nav-charts-model"
+                  type="button" role="tab" aria-controls="nav-charts-model" aria-selected="false">Charts
+          </button>
+        </div>
+        <div class="tab-content" id="nav-tabContent">
+          <div class="tab-pane fade show active" id="nav-environment" role="tabpanel"
+               aria-labelledby="nav-environment-tab">
+            <div class="form-floating">
+              <input class="form-control" id="episodeLength" aria-describedby="Episode length" disabled="disabled">
+              <label for="episodeLength">Episode length</label>
+            </div>
+            <input type="range" class="form-range" min="0" max="2000" id="episodeLengthRange">
+            <div class="form-floating">
+              <input class="form-control" id="obstacles"
+                     aria-describedby="The number of obstacles" disabled="disabled">
+              <label for="obstacles">Obstacles</label>
+            </div>
+            <input type="range" class="form-range" min="0" max="10" id="obstaclesRange">
+            <div class="form-floating">
+              <input class="form-control" id="proximityThreshold"
+                     aria-describedby="Sensor distance at which to apply negative reward(1-200)" disabled="disabled">
+              <label for="proximityThreshold" class="form-check-label">Proximity Threshold</label>
+            </div>
+            <input type="range" class="form-range" min="0" max="200" id="proximityThresholdRange">
+          </div>
+          <div class="tab-pane fade" id="nav-hyperparameters" role="tabpanel" aria-labelledby="nav-hyperparameters-tab">
+            <h4>Hyperparameters</h4>
+            <div class="form-floating">
+              <input class="form-control" id="boltzmannThreshold"
+                     aria-describedby="boltzmannThreshold" disabled="disabled">
+              <label for="boltzmannThreshold">Max Boltzmann Reward Threshold</label>
+            </div>
+            <input type="range" class="form-range" min="0" max="600" id="boltzmannThresholdRange">
+            <div class="form-floating">
+              <input class="form-control" id="boltzmannTemperature"
+                     aria-describedby="boltzmannTemperature" disabled="disabled">
+              <label for="boltzmannTemperature">Boltzmann Temperature</label>
+            </div>
+            <input type="range" class="form-range" min="0.01" max="1" step="0.01" id="boltzmannTemperatureRange">
+            <div class="form-floating">
+              <input class="form-control" id="discountFactor"
+                     aria-describedby="Discount factor" disabled="disabled">
+              <label for="discountFactor">Discount Factor</label>
+            </div>
+            <input type="range" class="form-range" min="0.01" max="1" step="0.01" id="discountFactorRange">
+            <div class="form-floating">
+              <input class="form-control" id="actorLearningRate"
+                     aria-describedby="Actor Learning Rate">
+              <label for="actorLearningRate">Actor Learning Rate</label>
+            </div>
+            <div class="form-floating">
+              <input class="form-control" id="criticLearningRate"
+                     aria-describedby="Critic Learning Rate">
+              <label for="criticLearningRate">Critic Learning Rate</label>
+            </div>
+            <button class='btn float-right' id='save' name='save'><i class='fa fa-refresh'> Save</i></button>
+          </div>
+          <div class="tab-pane fade" id="nav-new-model" role="tabpanel" aria-labelledby="nav-new-model-tab">
+            <div class="form-floating">
+              <input class="form-control" id="activeHistoryLength"
+                     aria-describedby="The number of active features">
+              <label for="activeHistoryLength">Active History Length</label>
+            </div>
+            <div class="form-floating">
+              <input class="form-control" id="hiddenUnits"
+                     aria-describedby="Number of units in the hidden layer">
+              <label for="hiddenUnits">Hidden Units</label>
+            </div>
+            <button class='btn float-right' id='save-reset' name='save'><i class='fa fa-refresh'> Create new model and
+              reset training</i></button>
+          </div>
+          <div class="tab-pane fade" id="nav-charts-model" role="tabpanel" aria-labelledby="nav-charts-tab"></div>
+        </div>
+      </nav>
       <div id="reward-chart"></div>
+      <div id="advantages-chart"></div>
       <div id="total-reward-container"></div>
       <div id="training-history-container"></div>
       <div id="weights"></div>
       <div id="sensors" style="width: 350px;"></div>
-    </div>
-  </div>
-  <div class="row">
-    <div class="col">
-        <h4>Environment</h4>
-      <div class="form-floating">
-        <input class="form-control" id="episodeLength"
-                 aria-describedby="Episode length">
-        <label for="episodeLength" class="form-control">Episode length</label>
-      </div>
-      <div class="form-floating">
-        <input class="form-control" id="obstacles"
-                 aria-describedby="The number of obstacles">
-        <label for="obstacles" class="form-control">Obstacles</label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="checkbox" id="cumulativeReward"
-                 aria-describedby="Cumulate reward on each step">
-        <label for="cumulativeReward" class="form-check-label">Cumulative Reward</label>
-      </div>
-      <div class="form-floating">
-        <input class="form-control" id="proximityThreshold"
-                 aria-describedby="Sensor distance at which to apply negative reward(1-200)">
-        <label for="proximityThreshold" class="form-control">Proximity Threshold</label>
-      </div>
-    </div>
-    <div class="col">
-      <h4>Hyperparameters</h4>
-      <div class="form-floating">
-        <input class="form-control" id="minEpsilon"
-               aria-describedby="minEpsilon">
-        <label for="minEpsilon" class="form-control">Min Epsilon</label>
-      </div>
-      <div class="form-floating">
-        <input class="form-control" id="epsilon"
-               aria-describedby="epsilon" disabled="disabled">
-        <label for="epsilon" class="form-control">Epsilon</label>
-      </div>
-      <div class="form-floating">
-        <input class="form-control" id="discountFactor"
-               aria-describedby="Discount factor">
-        <label for="discountFactor" class="form-control">Discount Factor</label>
-      </div>
-      <div class="form-floating">
-        <input class="form-control" id="actorLearningRate"
-               aria-describedby="Actor Learning Rate">
-        <label for="actorLearningRate" class="form-control">Actor Learning Rate</label>
-      </div>
-      <div class="form-floating">
-        <input class="form-control" id="criticLearningRate"
-               aria-describedby="Critic Learning Rate">
-        <label for="criticLearningRate" class="form-control">Critic Learning Rate</label>
-      </div>
-      <button class='btn float-right' id='save' name='save'><i class='fa fa-refresh'> Save</i></button>
-    </div>
-    <div class="col">
-        <h4>Model</h4>
-       <div class="form-floating">
-          <input class="form-control" id="activeHistoryLength"
-                 aria-describedby="The number of active features">
-          <label for="activeHistoryLength" class="form-control">Active History Length</label>
-        </div>
-        <div class="form-floating">
-          <input class="form-control" id="hiddenUnits"
-                 aria-describedby="Number of units in the hidden layer">
-          <label for="hiddenUnits" class="form-control">Hidden Units</label>
-        </div>
-      <button class='btn float-right' id='save-reset' name='save'><i class='fa fa-refresh'> Save & Reset</i></button>
     </div>
   </div>
 </div>
@@ -146,6 +164,7 @@
 <script src="js/total.chart.js"></script>
 <script src="js/history.chart.js"></script>
 <script src="js/weights.chart.js"></script>
+<script src="js/advantages.chart.js"></script>
 <script src="js/reward.environment.js"></script>
 <script src="js/collider.js"></script>
 <script src="js/normalizer.js"></script>
@@ -204,8 +223,8 @@
     discountFactor: 0.99,
     actorLearningRate: 0.001,
     criticLearningRate: 0.005,
-    epsilon: 0.9,
-    minEpsilon: 0.1,
+    boltzmannTemperature: 0.3,
+    boltzmannThreshold: 0.0,
     episodeLength: 1000,
   }
   if (localStorage.getItem('config')) {
@@ -236,11 +255,13 @@
 <script>
    let historyChart,
     rewardChart,
-    weightsChart;
+     weightsChart,
+     advantagesChart;
   createHistoryChart(historyData);
   createTotalChart(historyData);
   createRewardChart();
   createWeightsChart();
+   createAdvantagesChart();
 </script>
 <script>
   let environmentWidth = 500;
@@ -304,13 +325,16 @@
           document.getElementById(key).checked = config[key] === 1;
         } else {
           document.getElementById(key).value = config[key];
+          let rangeKey = key + 'Range';
+          if (document.getElementById(rangeKey)) {
+            document.getElementById(rangeKey).value = config[key];
+          }
         }
       }
     }
   }
 
   document.getElementById('save-reset').onclick = function () {
-    document.getElementById('epsilon').value = 1;
     saveConfig();
     if (window.location.hash.substr(1) !== 'reset') {
       window.location = window.location + '#reset';
@@ -335,6 +359,18 @@
     saveConfigToStorage();
   }
 
+  for (let rangeSlider of document.getElementsByClassName('form-range')) {
+    rangeSlider.oninput = function (event) {
+      let inputId = event.target.id.replace('Range', '');
+      if (document.getElementById(inputId)) {
+        document.getElementById(inputId).value = event.target.value;
+      }
+    }
+    rangeSlider.onchange = function (event) {
+      saveConfig();
+    }
+  }
+
   document.getElementById('save').onclick = function () {
     saveConfig();
     location.reload();
@@ -355,8 +391,8 @@
     actorCritic.critic.save('downloads://critic');
 
     const a = document.createElement('a');
-    a.href = URL.createObjectURL( new Blob([JSON.stringify(actorCritic.stateAdvantages)], { type:'text/json' }) );
-    a.download = 'stateAdvantages.json';
+    a.href = URL.createObjectURL( new Blob([JSON.stringify(config)], { type:'text/json' }) );
+    a.download = 'config.json';
     a.click();
   };
   updateConfigUi();
