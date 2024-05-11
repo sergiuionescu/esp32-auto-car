@@ -123,7 +123,6 @@ class BasicEnvironment {
       }
 
       localStorage.setItem('historyData', JSON.stringify(historyData));
-      config.epsilon = Math.max(0, (200 - actorCritic.episode) / 200);
       saveConfigToStorage();
 
       this.car.actorCritic.reset();

@@ -5,8 +5,6 @@ class ActorCritic {
     this.historyLength = historyLength;
     this.actionSize = actionSize;
     this.replayBuffer = [];
-    this.stateAdvantages = {};
-    this.trainingBufferKeys = {};
     this.valueSize = 1;
     this.test = test;
 
@@ -28,6 +26,7 @@ class ActorCritic {
     this.critic = this.critic ?? this.buildCritic();
     this.name = this.name ?? new Date().toLocaleString('en-in');
     this.trainingBuffer = {
+      'tfActionState': [],
       'tfState': [],
       'advantages': [],
       'targets': []
@@ -58,7 +57,13 @@ class ActorCritic {
     const model = tf.sequential();
     model.add(tf.layers.inputLayer({inputShape: [this.historyLength * this.featureCount],}));
 
-    model.add(this.commonLayer);
+    model.add(tf.layers.dropout(0.3))
+    model.add(tf.layers.dense({
+      units: parseInt(this.config.hiddenUnits),
+      activation: 'relu',
+      kernelInitializer: 'glorotUniform',
+    }));
+    model.add(tf.layers.dropout(0.3))
 
     model.add(tf.layers.dense({
       units: this.actionSize,
@@ -74,9 +79,15 @@ class ActorCritic {
   buildCritic() {
     const model = tf.sequential();
 
-    model.add(tf.layers.inputLayer({inputShape: [this.historyLength * this.featureCount],}));
+    model.add(tf.layers.inputLayer({inputShape: [this.historyLength * this.featureCount + 2],}));
 
-    model.add(this.commonLayer);
+    model.add(tf.layers.dropout(0.3))
+    model.add(tf.layers.dense({
+      units: parseInt(this.config.hiddenUnits),
+      activation: 'relu',
+      kernelInitializer: 'glorotUniform',
+    }));
+    model.add(tf.layers.dropout(0.3))
 
     model.add(tf.layers.dense({
       units: this.valueSize,
@@ -96,7 +107,7 @@ class ActorCritic {
     });
   }
 
-  getAction(state, actions, pushToChart = false) {
+  getAction(state, actions, pushToChart = false, reward) {
     let normalizeFeatures = normalizer.normalizeFeatures(state);
     let stateTensor = tf.tensor2d(normalizeFeatures, [1, state.length * state[0].length]);
     let policy = this.actor.predict(stateTensor, {
@@ -109,12 +120,11 @@ class ActorCritic {
       pushToWeightsChart(this.step, weights);
     }
 
+    if (reward < this.config.boltzmannThreshold) {
+      weights = this.getBoltzmannDistribution(weights);
+    }
     let action = chance.weighted(actions, weights);
     let agentAction = action;
-
-    if (Math.random() < this.config.epsilon && !this.test) {
-      action = chance.weighted(actions, [1, 1, 1, 0.2]);
-    }
 
     policy.dispose();
     stateTensor.dispose();
@@ -127,7 +137,7 @@ class ActorCritic {
       this.testRewards.push(reward);
     }
     this.replayBuffer.push({'ps': previousState, 'pa': previousAction, 'r': reward, 's': state});
-    this.computeTrainingData(previousState, state, reward, pushToChart);
+    this.computeTrainingData(previousState, previousAction, state, reward, pushToChart);
 
     this.step++;
   }
@@ -139,69 +149,62 @@ class ActorCritic {
   }
 
   async bufferTrainingData(state, action, reward, nextState) {
-    let advantages = new Array(this.actionSize).fill(0);
-    let {normalizedState, target, advantage} = this.computeTrainingData(state, nextState, reward, false);
+    let {normalizedState, normalizedActionState, targets, advantages} = this.computeTrainingData(state, action, nextState, reward, false);
 
-    const stateKey = JSON.stringify(normalizedState);
-    if (stateKey in this.stateAdvantages) {
-      advantages = this.stateAdvantages[stateKey];
-    }
-
-    advantages[action] = advantage;
-
-    this.stateAdvantages[stateKey] = advantages;
-
-    let count = 0;
-    for (advantage of advantages) {
-      if (advantage > 0) {
-        count++;
-      }
-    }
-    if (count > 1) {
-      console.log(advantages, stateKey);
-    }
-
-    if (!(stateKey in this.trainingBufferKeys)) {
-      this.trainingBuffer['tfState'].push(normalizedState);
-      this.trainingBuffer['advantages'].push(advantages);
-      this.trainingBuffer['targets'].push(target);
-    }
-    this.trainingBufferKeys[stateKey] = true;
-
+    this.trainingBuffer['tfState'].push(normalizedState);
+    this.trainingBuffer['advantages'].push(advantages);
+    this.trainingBuffer['tfActionState'].push(normalizedActionState);
+    this.trainingBuffer['targets'].push(targets[action]);
 
     this.rewards.push(reward);
   }
 
-  computeTrainingData(previousState, state, reward, pushToChart = true) {
+  computeTrainingData(previousState, previousAction, state, reward, pushToChart = true) {
     let normalizedPreviousState = normalizer.normalizeFeatures(previousState);
-    let tfPreviousState = tf.tensor2d(normalizedPreviousState, [1, normalizedPreviousState.length]);
-    const tfPredictedPreviousStateValue =  this.critic.predict(tfPreviousState);
+    let normalizedPreviousActionState = [...normalizedPreviousState, ...this.getActionOneHot(previousAction)];
+    let tfPreviousActionState = tf.tensor2d(normalizedPreviousActionState, [1, normalizedPreviousActionState.length]);
+    const tfPredictedPreviousStateValue =  this.critic.predict(tfPreviousActionState);
     let predictedPreviousStateValue = tfPredictedPreviousStateValue.dataSync();
 
-    let normalizedState = normalizer.normalizeFeatures(state);
-    let tfState = tf.tensor2d(normalizedState, [1, normalizedState.length]);
-    let tfPredictedStateValue = this.critic.predict(tfState);
-    let predictedStateValue = tfPredictedStateValue.dataSync();
+    let normalizeStateFeatures = normalizer.normalizeFeatures(state);
+    let normalizedActionStates = [];
+    for (let potentialAction of [0, 1, 2, 3]) {
+      normalizedActionStates.push([...normalizeStateFeatures, ...this.getActionOneHot(potentialAction)]);
+    }
+    let tfState = tf.tensor2d(normalizedActionStates, [normalizedActionStates.length, normalizedActionStates[0].length]);
+    let tfPredictedActionStateValues = this.critic.predict(tfState);
+    let predictedActionStateValues = tfPredictedActionStateValues.dataSync();
 
-    let target = reward + config.discountFactor * predictedStateValue;
-    let advantage = target - predictedPreviousStateValue;
-
-    if (pushToChart) {
-      pushToRewardChart(actorCritic.step, reward, parseFloat(predictedPreviousStateValue), parseFloat(predictedStateValue), advantage, target);
+    let targets = [];
+    for (let predictedActionStateValue of predictedActionStateValues) {
+      targets.push(reward + config.discountFactor * predictedActionStateValue)
+    }
+    let advantages = [];
+    for(let potentialAction in targets) {
+      advantages.push(targets[potentialAction] - predictedPreviousStateValue);
     }
 
-    tfPreviousState.dispose();
+    if (pushToChart) {
+      pushToAdvantagesChart(actorCritic.step, advantages);
+      pushToRewardChart(actorCritic.step, reward);
+    }
+
+    tfPreviousActionState.dispose();
     tfPredictedPreviousStateValue.dispose();
     tfState.dispose();
-    tfPredictedStateValue.dispose();
+    tfPredictedActionStateValues.dispose();
 
-    return {normalizedState: normalizedPreviousState, target, advantage};
+    return {normalizedState: normalizedPreviousState, normalizedActionState: normalizedPreviousActionState, targets, advantages};
   }
 
   async trainModel() {
     let epochs = 200;
     let batchSize = 16;
 
+    let tfActionState = tf.tensor2d(
+      this.trainingBuffer['tfActionState'],
+      [this.trainingBuffer['tfActionState'].length, this.trainingBuffer['tfActionState'][0].length]
+    );
     let tfState = tf.tensor2d(
       this.trainingBuffer['tfState'],
       [this.trainingBuffer['tfState'].length, this.trainingBuffer['tfState'][0].length]
@@ -232,7 +235,7 @@ class ActorCritic {
       }
     );
 
-    await this.critic.fit(tfState, targets, {
+    await this.critic.fit(tfActionState, targets, {
       epochs: epochs,
       batchSize: batchSize,
       callbacks: [
@@ -245,6 +248,7 @@ class ActorCritic {
       }
     );
 
+    tfActionState.dispose();
     tfState.dispose();
     advantages.dispose()
     targets.dispose();
@@ -257,8 +261,6 @@ class ActorCritic {
     this.averageReward = (this.averageReward * this.episode + reward) / (this.episode + 1);
     this.episode++;
 
-    let stateAdvantagesSize = parseInt(3000000 / JSON.stringify(Object.entries(this.stateAdvantages)[0]).length);
-    localStorage.setItem('stateAdvantages', JSON.stringify(Object.fromEntries(Object.entries(this.stateAdvantages).slice(-stateAdvantagesSize))));
     localStorage.setItem('episode', this.episode);
     localStorage.setItem('averageReward', this.averageReward);
     localStorage.setItem('name', this.name);
@@ -280,7 +282,6 @@ class ActorCritic {
       this.name = name;
       this.episode = fromLocalStorage ? (localStorage.getItem('episode') ?? 0) : config.episode;
       this.replayBuffer = [];
-      this.stateAdvantages = JSON.parse(localStorage.getItem('stateAdvantages') ?? '{}');
       this.averageReward = localStorage.getItem('averageReward') ?? 0;
       document.getElementById('episode').innerText = this.episode;
       document.getElementById('name').innerHTML = this.name;
@@ -329,14 +330,49 @@ class ActorCritic {
     return sum / list.length;
   }
 
+  getBoltzmannDistribution(weights) {
+
+    const probabilitiesArray = [].slice.call(weights);
+
+    const numerator = [];
+    for (let i = 0; i < probabilitiesArray.length; i++) {
+      numerator.push(Math.exp(-probabilitiesArray[i] / this.config.boltzmannTemperature));
+    }
+
+    let denominator = 0;
+    for (let i = 0; i < numerator.length; i++) {
+      denominator += numerator[i];
+    }
+
+    const boltzmannDist = [];
+    for (let i = 0; i < numerator.length; i++) {
+      boltzmannDist.push(numerator[i] / denominator);
+    }
+
+    return boltzmannDist;
+  }
+
+  getActionOneHot(action) {
+    switch (action) {
+      case 0:
+        return [0.0, 0.0];
+      case 1:
+        return [0.0, 1.0];
+      case 2:
+        return [1.0, 0.0];
+      case 3:
+        return [1.0, 1.0];
+    }
+  }
+
   reset() {
     this.replayBuffer = [];
-    this.trainingBufferKeys = {};
     this.rewards = [];
     this.testRewards = [];
     this.step = 0;
-    this.test = !this.test;
+    this.test = !this.test && this.episode > 0 && this.episode % 10 === 0;
     this.trainingBuffer = {
+      'tfActionState': [],
       'tfState': [],
       'advantages': [],
       'targets': []

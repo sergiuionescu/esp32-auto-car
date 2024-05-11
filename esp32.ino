@@ -9,12 +9,13 @@
 #include "EloquentTinyML.h"
 #include "eloquent_tinyml/tensorflow.h"
 #include "model_data.h"
+#include <VL53L0X.h>
 
 #ifndef max
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 #endif
 
-#define N_INPUTS 30
+#define N_INPUTS 25
 #define N_OUTPUTS 4
 #define TENSOR_ARENA_SIZE 2*1024
 #define AI_ACTION_FORWARD 0
@@ -29,15 +30,6 @@ Eloquent::TinyML::TensorFlow::TensorFlow<N_INPUTS, N_OUTPUTS, TENSOR_ARENA_SIZE>
 
 const int onBoardLed = 2;
 
-const int echoPinFM = 12;
-const int trigPinFM = 13;
-
-const int echoPinFL = 14;
-const int trigPinFL = 32;
-
-const int echoPinFR = 5;
-const int trigPinFR = 4;
-
 const int pulseTimeout = 8000;
 
 const char* ssid     = "ESP32";
@@ -50,20 +42,28 @@ long duration;
 int distanceFL;
 int distanceFR;
 int distanceFM;
+int distanceBR;
+int distanceBL;
+
+VL53L0X sensorFM;
+VL53L0X sensorFL;
+VL53L0X sensorBL;
+VL53L0X sensorFR;
+VL53L0X sensorBR;
 
 int motorRightReference;
 int motorLeftReference;
 int iddleDirection = 1;
 
 struct Channel {
-    int en1;
-    int en2;
-    int pwm;
-    int value;
+  int en1;
+  int en2;
+  int pwm;
+  int value;
 };
 
-Channel motorRight = { 26 , 25 , 33 , 0 };
-Channel motorLeft = { 18 , 19 , 23 , 0 }; // en1 , en2 , pwm , value
+Channel motorLeft = { 26 , 25 , 32 , 0 };
+Channel motorRight = { 18 , 19 , 23 , 0 }; // en1 , en2 , pwm , value
 
 int standby = 27;
 
@@ -73,15 +73,15 @@ const int pwmChannelLeft = 0;
 const int pwmChannelRight = 1;
 const int resolution = 8;
 
-IPAddress local_ip(192,168,1,1);
-IPAddress gateway(192,168,1,1);
-IPAddress subnet(255,255,255,0);
+IPAddress local_ip(192, 168, 1, 1);
+IPAddress gateway(192, 168, 1, 1);
+IPAddress subnet(255, 255, 255, 0);
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
 //MPU i2c 21, 22
-MPU9250 MPU(Wire,0x68);
+MPU9250 MPU(Wire, 0x68);
 Madgwick MadgwickFilter;
 
 float accelX;
@@ -110,25 +110,23 @@ int aiMode = 0;
 
 void setup() {
   Serial.begin(115200);
+  Wire.begin();
 
   logToSerial("Starting…");
   connectOrAp();
 
-  if(!SPIFFS.begin(true)){
+  if (!SPIFFS.begin(true)) {
     Serial.println("An Error has occurred while mounting SPIFFS");
     return;
   }
 
   pinMode(onBoardLed, OUTPUT);
 
-  pinMode(trigPinFL, OUTPUT);
-  pinMode(echoPinFL, INPUT);
-
-  pinMode(trigPinFR, OUTPUT);
-  pinMode(echoPinFR, INPUT);
-
-  pinMode(trigPinFM, OUTPUT);
-  pinMode(echoPinFM, INPUT);
+  init_sensor(sensorFM, 0x31, 13);
+  init_sensor(sensorFL, 0x30, 5);
+  init_sensor(sensorBL, 0x33, 14);
+  init_sensor(sensorFR, 0x34, 12);
+  init_sensor(sensorBR, 0x32, 33);
 
   pinMode(motorRight.en1, OUTPUT);
   pinMode(motorRight.en2, OUTPUT);
@@ -144,7 +142,7 @@ void setup() {
   if (!MPU.begin()) {
     Serial.println("IMU initialization unsuccessful");
     Serial.println("Check IMU wiring or try cycling power");
-    while(1) {}
+    while (1) {}
   }
 
   ledcSetup(pwmChannelLeft, freq, resolution);
@@ -166,13 +164,13 @@ void setup() {
 
   server.begin();
 
-//  Serial.println("calibrate MPU accelerometer");
-//  MPU.calibrateAccel();
-//  Serial.println("calibrate MPU gyro");
-//  MPU.calibrateGyro();
-//  Serial.println("calibrate MPU magnetometer");
-//  MPU.calibrateMag();
-//  Serial.println("calibrate completed");
+  //  Serial.println("calibrate MPU accelerometer");
+  //  MPU.calibrateAccel();
+  //  Serial.println("calibrate MPU gyro");
+  //  MPU.calibrateGyro();
+  //  Serial.println("calibrate MPU magnetometer");
+  //  MPU.calibrateMag();
+  //  Serial.println("calibrate completed");
 
 
   MPU.setAccelRange(MPU9250::ACCEL_RANGE_4G);
@@ -185,24 +183,26 @@ void setup() {
   tf.begin(model_data);
   // check if model loaded fine
   if (!tf.isOk()) {
-      Serial.print("ERROR: ");
-      Serial.println(tf.getErrorMessage());
-      
-      while (true) delay(1000);
+    Serial.print("ERROR: ");
+    Serial.println(tf.getErrorMessage());
+
+    while (true) delay(1000);
   }
-  for(int i=0; i<N_INPUTS; i++) {
+  for (int i = 0; i < N_INPUTS; i++) {
     input[i] = 1;
   }
 
+  scan_i2c();
+
   logToSerial("Setup done");
 
-  digitalWrite(onBoardLed,HIGH);
+  digitalWrite(onBoardLed, HIGH);
   delay(500);
-  digitalWrite(onBoardLed,LOW);
+  digitalWrite(onBoardLed, LOW);
   delay(500);
-  digitalWrite(onBoardLed,HIGH);
+  digitalWrite(onBoardLed, HIGH);
   delay(500);
-  digitalWrite(onBoardLed,LOW);
+  digitalWrite(onBoardLed, LOW);
 }
 
 void loop() {
@@ -210,13 +210,19 @@ void loop() {
   unsigned long loopStartTimeMs = millis();
   unsigned long carrierTimeMs = millis();
 
- 
-  if(loopMs > 0) {
+
+  if (loopMs > 0) {
     loopTimeMs = loopStartTimeMs - loopMs;
   }
   loopMs = loopStartTimeMs;
 
-  updateDistance();
+  read_sensor(sensorFM, distanceFM);
+  read_sensor(sensorFR, distanceFR);
+  read_sensor(sensorBR, distanceBR);
+  read_sensor(sensorFL, distanceFL);
+  read_sensor(sensorBL, distanceBL);
+
+  pushToInputBuffer(distanceBL, distanceFL, distanceFM, distanceFR, distanceBR);
   distanceTimeMs = millis() -  carrierTimeMs;
   carrierTimeMs = millis();
   getAiAction();
@@ -264,7 +270,7 @@ void handleTf(AsyncWebServerRequest *request) {
 
 void sendToWs() {
   String message;
-  const size_t capacity = 3*JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(24);
+  const size_t capacity = 3 * JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(24);
   DynamicJsonDocument doc(capacity);
 
   JsonObject data = doc.createNestedObject("data");
@@ -304,100 +310,120 @@ void sendToWs() {
 }
 
 
-void updateDistance() {
-//  logToSerial("Sensor FL");
-  digitalWrite(trigPinFL, LOW);
-  delayMicroseconds(4);
-  digitalWrite(trigPinFL, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPinFL, LOW);
-  duration = pulseIn(echoPinFL, HIGH, pulseTimeout);
-  if(duration > 0) {
-    distanceFL = duration*0.034/2;
-  } else {
-    distanceFL = 200;
-  }
+void init_sensor(VL53L0X &sensor, uint8_t address, int xshut_pin) {
+  pinMode(xshut_pin, OUTPUT);
+  digitalWrite(xshut_pin, LOW);
+  digitalWrite(xshut_pin, HIGH);
+  delay(50);
 
-
-//  logToSerial("Sensor FR");
-  digitalWrite(trigPinFR, LOW);
-  delayMicroseconds(4);
-  digitalWrite(trigPinFR, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPinFR, LOW);
-  duration = pulseIn(echoPinFR, HIGH, pulseTimeout);
-  if(duration > 0) {
-    distanceFR = duration*0.034/2;
-  } else {
-    distanceFR = 200;
+  sensor.setTimeout(500);
+  if (!sensor.init())
+  {
+    Serial.println("Failed to detect and initialize sensor!");
+    return;
   }
+  sensor.setAddress(address);
 
-//  logToSerial("Sensor FM");
-  digitalWrite(trigPinFM, LOW);
-  delayMicroseconds(4);
-  digitalWrite(trigPinFM, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPinFM, LOW);
-  duration = pulseIn(echoPinFM, HIGH, pulseTimeout);
-  if(duration > 0) {
-    distanceFM = duration*0.034/2;
-  } else {
-    distanceFM = 200;
-  }
-  pushToInputBuffer(distanceFL, distanceFM, distanceFR);
+  sensor.startContinuous(20);
 }
 
-void updatePWM(){
-    motorRight.value = motorRightReference;
-    motorLeft.value = motorLeftReference;
-    bool distanceThreshold = false;
-   
+void read_sensor(VL53L0X &sensor, int &distance) {
+  distance = (int) sensor.readRangeContinuousMillimeters() / 10;
+  Serial.print(sensor.readRangeContinuousMillimeters());
+  if (sensor.timeoutOccurred()) {
+    Serial.print(" TIMEOUT");
+  }
 
-    if(distanceFL <= 30 || distanceFM <= 30 || distanceFR <= 30) {
-      distanceThreshold = true;
+  Serial.println();
+}
+
+void scan_i2c() {
+  byte error, address;
+  int nDevices;
+
+  Serial.println("Scanning...");
+
+  nDevices = 0;
+  for (address = 1; address < 127; address++ )
+  {
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+
+    if (error == 0)
+    {
+      Serial.print("I2C device found at address 0x");
+      if (address < 16)
+        Serial.print("0");
+      Serial.print(address, HEX);
+      Serial.println("  !");
+
+      nDevices++;
     }
-
-    if(distanceThreshold) {
-      digitalWrite(onBoardLed,HIGH);
-    } else {
-      digitalWrite(onBoardLed,LOW);
+    else if (error == 4)
+    {
+      Serial.print("Unknown error at address 0x");
+      if (address < 16)
+        Serial.print("0");
+      Serial.println(address, HEX);
     }
+  }
+  if (nDevices == 0)
+    Serial.println("No I2C devices found\n");
+  else
+    Serial.println("done\n");
+}
 
-   if((aiMode == AI_MODE_ASSIST && distanceThreshold) || aiMode == AI_MODE_AUTO) {
-      if(aiAction == AI_ACTION_FORWARD) {
-        motorRight.value = 150;
-        motorLeft.value = 150;
-      } else if(aiAction == AI_ACTION_RIGHT) {
-        motorRight.value = -150;
-        motorLeft.value = 150;
-      } else if(aiAction == AI_ACTION_LEFT) {
-        motorRight.value = 150;
-        motorLeft.value = -150;
-      } else if(aiAction == AI_ACTION_BACK) {
-        motorRight.value = -150;
-        motorLeft.value = -150;
-      }
-    } 
+void updatePWM() {
+  motorRight.value = motorRightReference;
+  motorLeft.value = motorLeftReference;
+  bool distanceThreshold = false;
 
-    //Channel 1
-    if(motorRight.value < 0){
-        digitalWrite(motorRight.en1, LOW);
-        digitalWrite(motorRight.en2, HIGH);
-    } else{
-        digitalWrite(motorRight.en1, HIGH);
-        digitalWrite(motorRight.en2, LOW);
+
+  if (distanceFL <= 50 || distanceFM <= 50 || distanceFR <= 50) {
+    distanceThreshold = true;
+  }
+
+  if (distanceThreshold) {
+    digitalWrite(onBoardLed, HIGH);
+  } else {
+    digitalWrite(onBoardLed, LOW);
+  }
+
+  if ((aiMode == AI_MODE_ASSIST && distanceThreshold) || aiMode == AI_MODE_AUTO) {
+    if (aiAction == AI_ACTION_FORWARD) {
+      motorRight.value = 150;
+      motorLeft.value = 150;
+    } else if (aiAction == AI_ACTION_RIGHT) {
+      motorRight.value = -150;
+      motorLeft.value = 150;
+    } else if (aiAction == AI_ACTION_LEFT) {
+      motorRight.value = 150;
+      motorLeft.value = -150;
+    } else if (aiAction == AI_ACTION_BACK) {
+      motorRight.value = -150;
+      motorLeft.value = -150;
     }
-    ledcWrite(pwmChannelRight, abs(motorRight.value));
+  }
 
-    //Channel 2
-    if(motorLeft.value < 0){
-        digitalWrite(motorLeft.en1, LOW);
-        digitalWrite(motorLeft.en2, HIGH);
-    }else{
-        digitalWrite(motorLeft.en1, HIGH);
-        digitalWrite(motorLeft.en2, LOW);
-    }
-    ledcWrite(pwmChannelLeft, abs(motorLeft.value));
+  //Channel 1
+  if (motorRight.value < 0) {
+    digitalWrite(motorRight.en1, LOW);
+    digitalWrite(motorRight.en2, HIGH);
+  } else {
+    digitalWrite(motorRight.en1, HIGH);
+    digitalWrite(motorRight.en2, LOW);
+  }
+  ledcWrite(pwmChannelRight, abs(motorRight.value));
+
+  //Channel 2
+  if (motorLeft.value < 0) {
+    digitalWrite(motorLeft.en1, LOW);
+    digitalWrite(motorLeft.en2, HIGH);
+  } else {
+    digitalWrite(motorLeft.en1, HIGH);
+    digitalWrite(motorLeft.en2, LOW);
+  }
+  ledcWrite(pwmChannelLeft, abs(motorLeft.value));
 }
 
 void handleLogin(AsyncWebServerRequest *request) {
@@ -428,12 +454,12 @@ void handleScan(AsyncWebServerRequest *request) {
 
 void handleConnect(AsyncWebServerRequest *request) {
   int params = request->params();
-  for(int i=0;i<params;i++){
+  for (int i = 0; i < params; i++) {
     AsyncWebParameter* param = request->getParam(i);
-    if(param->name() == "ssid") {
+    if (param->name() == "ssid") {
       wifi_ssid = param->value();
     }
-    if(param->name() == "password") {
+    if (param->name() == "password") {
       wifi_password = param->value();
     }
   }
@@ -455,16 +481,16 @@ void handleConnect(AsyncWebServerRequest *request) {
 
 void connectOrAp() {
   WiFi.begin();
-//  for(int i=0;i<10;i++){
-//     if(WiFi.status() == WL_CONNECTED) {
-//      delay(100);
-//      break;
-//    }
-//    delay(500);
-//    logToSerial("Connecting to previous WiFi..");
-//  }
+  //  for(int i=0;i<10;i++){
+  //     if(WiFi.status() == WL_CONNECTED) {
+  //      delay(100);
+  //      break;
+  //    }
+  //    delay(500);
+  //    logToSerial("Connecting to previous WiFi..");
+  //  }
 
-  if(WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED) {
     WiFi.mode(WIFI_AP);
     WiFi.disconnect();
     delay(100);
@@ -544,33 +570,35 @@ void readMPU() {
 }
 
 float normalizeInput(int distance) {
-  float result = round((float) distance/10.0);
+  float result = round((float) distance / 10.0);
 
-  return result/20.0;
+  return result / 20.0;
 }
 
-void pushToInputBuffer(int distanceFL, int distanceFM, int distanceFR) {
-  for(int i=0; i<N_INPUTS-3; i++) {
-    input[i] = input[i+3];
+void pushToInputBuffer(int distanceBL, int distanceFL, int distanceFM, int distanceFR, int distanceBR) {
+  for (int i = 0; i < N_INPUTS - 5; i++) {
+    input[i] = input[i + 5];
   }
 
-  input[N_INPUTS-3] = normalizeInput(distanceFL);
-  input[N_INPUTS-2] = normalizeInput(distanceFM);
-  input[N_INPUTS-1] = normalizeInput(distanceFR);
+  input[N_INPUTS - 5] = normalizeInput(distanceBL);
+  input[N_INPUTS - 4] = normalizeInput(distanceFL);
+  input[N_INPUTS - 3] = normalizeInput(distanceFM);
+  input[N_INPUTS - 2] = normalizeInput(distanceFR);
+  input[N_INPUTS - 1] = normalizeInput(distanceBR);
 }
 
 int getRandomProbs(float values[N_OUTPUTS]) {
   float rnd = esp_random() / UINT32_MAX;
   float carry = 0;
   int i;
-  
-  for(i=0;i<=N_OUTPUTS;i++) {
-    if(rnd<carry + values[i]) {
+
+  for (i = 0; i <= N_OUTPUTS; i++) {
+    if (rnd < carry + values[i]) {
       return i;
     }
     carry += values[i];
   }
-  
+
   return i;
 }
 

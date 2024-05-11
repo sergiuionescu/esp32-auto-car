@@ -61,7 +61,7 @@ class Car {
     this.state.push(state);
     this.state.shift();
 
-    let {action, agentAction} = actorCritic.getAction(this.state, actions, this.pushToChart);
+    let {action, agentAction} = actorCritic.getAction(this.state, actions, this.pushToChart, reward);
 
     this.perceptionChart.update(normalizer.normalizeFeatures(this.previousState), this.previousAgentAction, reward);
 

@@ -31,40 +31,33 @@ docker compose run tensorflow sh convert.sh
 
 ### Circuit connection
 
-| ESP32 | TB6612FNG | HC-SRO4 FR | HC-SRO4 FL | HC-SRO4 FM | MPU9250 | Motor Left | Motor Right |
-|-------|------------|------------|------------|------------|---------|------------|-------------|
-|       | VM(9V)     |            |            |            |         |            |             |
-| VCC   | VCC        |            |            |            |         |            |             |
-| GND   | GND        |            |            |            |         |            |             |
-| GND   | GND        |            |            |            |         |            |             |
-| GND   | GND        |            |            |            |         |            |             |
-| D18   | AIN1       |            |            |            |         |            |             |
-| D19   | AIN2       |            |            |            |         |            |             |
-| D23   | PWMA       |            |            |            |         |            |             |
-| D27   | STBY       |            |            |            |         |            |             |
-| D26   | BIN1       |            |            |            |         |            |             |
-| D25   | BIN2       |            |            |            |         |            |             |
-| D33   | PWMB       |            |            |            |         |            |             |
-| D5    |            | Echo       |            |            |         |            |             |
-| D4    |            | Trig       |            |            |         |            |             |
-| GND   |            | Gnd        |            |            |         |            |             |
-| VIN   |            | Vcc        |            |            |         |            |             |
-| D14   |            |            | Echo       |            |         |            |             |
-| D32   |            |            | Trig       |            |         |            |             |
-| GND   |            |            | Gnd        |            |         |            |             |
-| VIN   |            |            | Vcc        |            |         |            |             |
-| D12   |            |            |            | Echo       |         |            |             |
-| D13   |            |            |            | Trig       |         |            |             |
-| GND   |            |            |            | Gnd        |         |            |             |
-| VIN   |            |            |            | Vcc        |         |            |             |
-| D21   |            |            |            |            | SDA     |            |             |
-| D22   |            |            |            |            | SCL     |            |             |
-| 3V3   |            |            |            |            | VCC     |            |             |
-| GND   |            |            |            |            | GND     |            |             |
-|       | A1         |            |            |            |         | A1         |             |
-|       | A2         |            |            |            |         | A2         |             |
-|       | B1         |            |            |            |         |            | B1          |
-|       | B2         |            |            |            |         |            | B2          |
+| ESP32 | TB6612FNG | MPU9250 | Motor Left | Motor Right | VL53L0X FM | VL53L0X FR | VL53L0X BR | VL53L0X FL | VL53L0X BL |
+|-------|-----------|---------|------------|-------------|------------|------------|------------|------------|------------|
+|       | VM(9V)    |         |            |             |            |            |            |            |            |
+| VCC   | VCC       |         |            |             | VCC        | VCC        | VCC        | VCC        | VCC        |
+| GND   | GND       |         |            |             | GND        | GND        | GND        | GND        | GND        |
+| GND   | GND       |         |            |             |            |            |            |            |            |
+| GND   | GND       |         |            |             |            |            |            |            |            |
+| D18   | AIN1      |         |            |             |            |            |            |            |            |
+| D19   | AIN2      |         |            |             |            |            |            |            |            |
+| D23   | PWMA      |         |            |             |            |            |            |            |            |
+| D27   | STBY      |         |            |             |            |            |            |            |            |
+| D26   | BIN1      |         |            |             |            |            |            |            |            |
+| D25   | BIN2      |         |            |             |            |            |            |            |            |
+| D32   | PWMB      |         |            |             |            |            |            |            |            |
+| D21   |           | SDA     |            |             | SDA        | SDA        | SDA        | SDA        | SDA        |
+| D22   |           | SCL     |            |             | SCL        | SCL        | SCL        | SCL        | SCL        |
+| 3V3   |           | VCC     |            |             |            |            |            |            |            |
+| GND   |           | GND     |            |             |            |            |            |            |            |
+|       | A1        |         | A1         |             |            |            |            |            |            |
+|       | A2        |         | A2         |             |            |            |            |            |            |
+|       | B1        |         |            | B1          |            |            |            |            |            |
+|       | B2        |         |            | B2          |            |            |            |            |            |
+| D5    |           |         |            |             |            |            |            |            | XSHUT      |
+| D33   |           |         |            |             |            |            | XSHUT      |            |            |
+| D12   |           |         |            |             |            | XSHUT      |            |            |            |
+| D13   |           |         |            |             |            |            |            | XSHUT      |            |
+| D14   |           |         |            |             | XSHUT      |            |            |            |            |
 
 
 ## Demo video
