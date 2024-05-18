@@ -1,0 +1,17 @@
+{
+  "hiddenUnits": "32",
+  "obstacles": "3",
+  "activeHistoryLength": "10",
+  "cumulativeReward": 0,
+  "proximityThreshold": "30",
+  "proximityPenalty": -2,
+  "collisionPenalty": -5,
+  "discountFactor": "0.9",
+  "actorLearningRate": "0.001",
+  "criticLearningRate": "0.005",
+  "boltzmannTemperature": "1",
+  "boltzmannThreshold": "0",
+  "episodeLength": "1008",
+  "name": 3,
+  "episode": 420
+}
